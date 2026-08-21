@@ -242,6 +242,29 @@ func TestVerifyRejectsWrongHost(t *testing.T) {
 	}
 }
 
+func TestVerifyPublicHostAsFullURL(t *testing.T) {
+	key := newKey(t)
+
+	// PUBLIC_HOST may be configured as a full URL; the verifier must reduce it to the bare host.
+
+	v := NewVerifier(
+		map[string]*rsa.PublicKey{keyPairID: &key.PublicKey},
+		60,
+		WithPublicHost("https://cdn.example.com/"),
+	)
+
+	r := request(
+		"/i/a.png",
+		signedCookie(
+			t, key, crypto.SHA256, "https://cdn.example.com/i/*", time.Now().Add(time.Hour).Unix(),
+		),
+	)
+
+	if err := v.Verify(r); err != nil {
+		t.Errorf("Verify() with full-URL PUBLIC_HOST = %v, want nil", err)
+	}
+}
+
 func TestVerifyForceSchemeHTTPS(t *testing.T) {
 	key := newKey(t)
 	v := NewVerifier(map[string]*rsa.PublicKey{keyPairID: &key.PublicKey}, 60, WithForceSchemeHTTPS(true))

@@ -40,8 +40,26 @@ type VerifierOption func(*Verifier)
 
 func WithPublicHost(host string) VerifierOption {
 	return func(v *Verifier) {
-		v.publicHost = host
+		v.publicHost = normalizePublicHost(host)
 	}
+}
+
+func normalizePublicHost(host string) string {
+	h := strings.TrimSpace(host)
+
+	// Strip a scheme if present so the URL parser won't treat the rest as a path.
+
+	if i := strings.Index(h, "://"); i != -1 {
+		h = h[i+len("://"):]
+	}
+
+	// Drop any path or query, and a trailing slash that may remain.
+
+	if i := strings.IndexAny(h, "/?"); i != -1 {
+		h = h[:i]
+	}
+
+	return h
 }
 
 func WithForceSchemeHTTPS(force bool) VerifierOption {
@@ -88,7 +106,7 @@ func (v *Verifier) Verify(r *http.Request) error {
 
 	keyPairID := cookieValue(r, "CloudFront-Key-Pair-Id")
 	if keyPairID == "" {
-		v.logger.Debug("rejected request: missing key-pair-id", "path", path)
+		v.logger.Warn("rejected request: missing key-pair-id", "path", path)
 
 		return ErrMissingKeyPairID
 	}
@@ -105,14 +123,14 @@ func (v *Verifier) Verify(r *http.Request) error {
 
 	signature := cookieValue(r, "CloudFront-Signature")
 	if signature == "" {
-		v.logger.Debug("rejected request: missing signature", "keyPairId", keyPairID, "path", path)
+		v.logger.Warn("rejected request: missing signature", "keyPairId", keyPairID, "path", path)
 
 		return ErrAccessDenied
 	}
 
 	policyVal := cookieValue(r, "CloudFront-Policy")
 	if policyVal == "" {
-		v.logger.Debug("rejected request: missing policy", "keyPairId", keyPairID, "path", path)
+		v.logger.Warn("rejected request: missing policy", "keyPairId", keyPairID, "path", path)
 
 		return ErrAccessDenied
 	}
@@ -162,7 +180,7 @@ func (v *Verifier) Verify(r *http.Request) error {
 	}
 
 	if time.Now().After(time.Unix(expiresAt, 0).Add(v.clockSkew)) {
-		v.logger.Debug("rejected request: policy expired",
+		v.logger.Warn("rejected request: policy expired",
 			"keyPairId", keyPairID,
 			"expiresAt", time.Unix(expiresAt, 0),
 			"path", path,
