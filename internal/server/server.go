@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"log"
@@ -56,6 +57,16 @@ func New(cfg config.Config, store ObjectStore, logger *log.Logger) *Server {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
+
+		// Cap header size to bound base64-decoding of oversized cookies before signature verification.
+
+		MaxHeaderBytes: 64 << 10,
+		TLSConfig: &tls.Config{
+			// Require TLS 1.2+ when serving TLS directly. Go's default cipher suites for TLS 1.2 already exclude
+			// all non-AEAD ciphers, so no explicit list is needed.
+
+			MinVersion: tls.VersionTLS12,
+		},
 	}
 
 	return s
@@ -119,10 +130,18 @@ func (s *Server) handleObject(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	if s.maxResponseBytes > 0 {
-		// Bound the streamed body as defense-in-depth. Known lengths are rejected above; this caps
-		// chunked/unknown-length responses.
+		// Bound the streamed body as defense-in-depth. Known lengths are rejected above; for
+		// chunked/unknown-length responses we probe one byte past the limit so an oversized object
+		// is detected and the connection aborted rather than silently truncated.
 
-		_, _ = io.Copy(w, io.LimitReader(obj.Body, s.maxResponseBytes))
+		n, _ := io.Copy(w, io.LimitReader(obj.Body, s.maxResponseBytes))
+		if n == s.maxResponseBytes {
+			var extra [1]byte
+			if m, _ := obj.Body.Read(extra[:]); m > 0 {
+				s.log.Printf("object %q exceeded max response size %d mid-stream; aborting", key, s.maxResponseBytes)
+				panic(http.ErrAbortHandler)
+			}
+		}
 	} else {
 		_, _ = io.Copy(w, obj.Body)
 	}

@@ -36,15 +36,30 @@ func TestMapPathAvatar(t *testing.T) {
 }
 
 func TestMapPathTraversal(t *testing.T) {
+	// MapPath receives r.URL.Path, which net/http has already percent-decoded. So these inputs are the decoded form
+	// of a client's %2e%2e/%2f request.
+
 	for _, p := range []string{
 		"/i/../../etc/passwd",
-		"/i/..%2f..%2fetc/passwd",
-		"/a/%2e%2e/%2e%2e/secret",
+		"/a/../../secret",
 		"/i/foo/../bar",
 	} {
 		if _, err := MapPath(p); !errors.Is(err, ErrInvalidKey) {
 			t.Errorf("MapPath(%q) error = %v, want ErrInvalidKey", p, err)
 		}
+	}
+}
+
+// TestMapPathDoubleEncodedTraversalIsLiteral confirms that a double-encoded traversal (net/http decodes %252e%252e
+// once, leaving %2e%2e) is not itself decoded by MapPath and so is treated as a literal object key. It does not
+// traverse; S3 treats the %-encoded segments as literal key characters.
+func TestMapPathDoubleEncodedTraversalIsLiteral(t *testing.T) {
+	key, err := MapPath("/i/%2e%2e/%2e%2e/secret")
+	if err != nil {
+		t.Fatalf("MapPath() unexpected error: %v", err)
+	}
+	if key != "i/%2e%2e/%2e%2e/secret" {
+		t.Errorf("key = %q, want literal key", key)
 	}
 }
 
@@ -61,8 +76,11 @@ func TestMapPathInvalidPrefix(t *testing.T) {
 	}
 }
 
-func TestMapPathURLEncodedKey(t *testing.T) {
-	key, err := MapPath("/i/my%20file.png")
+func TestMapPathDecodedKey(t *testing.T) {
+	// net/http decodes %20 before MapPath runs, so a client request for "/i/my%20file.png" arrives here as
+	// "/i/my file.png".
+
+	key, err := MapPath("/i/my file.png")
 	if err != nil {
 		t.Fatalf("MapPath() unexpected error: %v", err)
 	}

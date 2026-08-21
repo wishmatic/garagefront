@@ -57,6 +57,20 @@ Future audits should not re-flag the items below.
 
 It should not even mention them as "ignored" in the audit; just don't mention them at all.
 
+## Known Issues
+
+- No rate limiting on the served endpoints:
+    - Requests are verified before any upstream storage call, so unauthenticated traffic never reaches S3. However, a
+      valid signed cookie is broadly scoped (`/i/*` or `/a/*`) and long-lived, so it can be replayed to drive a 1:1
+      amplification of `GetObject` requests against the origin. There is no in-process cache (see `docs/DIVERGENCES.md`),
+      so every cache-miss inline image load reaches the origin.
+    - In the intended deployment this is mitigated by the reverse proxy's asset cache (Nginx Proxy Manager "Cache
+      Assets"): responses carry `Cache-Control: public, max-age=31536000, immutable`, so repeated requests for the same
+      object are served from the proxy cache and never reach the origin. That covers the dominant case (many clients
+      loading the same stable-keyed images/avatars). It does not bound a determined actor enumerating _distinct_ keys
+      (cache misses), nor raw request rate; for the self-hosted, trusted-client model this residual is not much of a
+      risk. Still, it could still be something worth fixing in future.
+
 ## Agentic Audit
 
 An agent should, on top of its usual thorough security review, provide potential mitigations, whether or not these

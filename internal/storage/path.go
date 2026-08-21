@@ -1,8 +1,6 @@
 package storage
 
 import (
-	"fmt"
-	"net/url"
 	"slices"
 	"strings"
 )
@@ -18,13 +16,12 @@ import (
 //
 // The only validation is that the path begins with a known namespace ("i" or "a") and contains no path-traversal
 // segments.
+//
+// p is expected to be r.URL.Path, which net/http has already percent-decoded. Decoding again here would turn a
+// literal "%2e%2e"/"%2f" in an object key into traversal or path separators, so we operate on the decoded path
+// exactly once.
 func MapPath(p string) (string, error) {
-	decoded, err := url.PathUnescape(p)
-	if err != nil {
-		return "", fmt.Errorf("decode path: %w", err)
-	}
-
-	segments := splitPath(decoded)
+	segments := splitPath(p)
 
 	if slices.Contains(segments, "..") {
 		return "", ErrInvalidKey
