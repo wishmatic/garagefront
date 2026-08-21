@@ -1,3 +1,3 @@
 # garagefront
 
-cloudfront emulator for Garage and LibreChat enabling "cookies" image signing
+Cloudfront emulator for Garage and LibreChat enabling "cookies" image signing
