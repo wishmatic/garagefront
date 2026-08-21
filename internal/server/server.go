@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -35,6 +36,7 @@ func New(cfg config.Config, store ObjectStore, logger *log.Logger) *Server {
 		cfg.ClockSkewSeconds,
 		cookie.WithPublicHost(cfg.PublicHost),
 		cookie.WithForceSchemeHTTPS(cfg.ForceSchemeHTTPS),
+		cookie.WithLogger(slog.New(slog.NewTextHandler(logger.Writer(), nil))),
 	)
 
 	s := &Server{
@@ -84,6 +86,7 @@ func securityHeaders(next http.Handler) http.Handler {
 
 func (s *Server) handleObject(w http.ResponseWriter, r *http.Request) {
 	if err := s.verifier.Verify(r); err != nil {
+		s.log.Printf("forbidden: path=%q host=%q err=%v", r.URL.Path, r.Host, err)
 		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 
 		return

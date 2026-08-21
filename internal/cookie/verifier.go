@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,6 +20,7 @@ type Verifier struct {
 	clockSkew        time.Duration
 	publicHost       string
 	forceSchemeHTTPS bool
+	logger           *slog.Logger
 }
 
 // policy mirrors the JSON policy signed into CloudFront-Policy. LibreChat emits exactly one Statement with a Resource
@@ -47,6 +50,12 @@ func WithForceSchemeHTTPS(force bool) VerifierOption {
 	}
 }
 
+func WithLogger(logger *slog.Logger) VerifierOption {
+	return func(v *Verifier) {
+		v.logger = logger
+	}
+}
+
 func NewVerifier(keys map[string]*rsa.PublicKey, clockSkewSeconds int, opts ...VerifierOption) *Verifier {
 	v := &Verifier{
 		keys:      keys,
@@ -57,66 +66,119 @@ func NewVerifier(keys map[string]*rsa.PublicKey, clockSkewSeconds int, opts ...V
 		opt(v)
 	}
 
+	if v.logger == nil {
+		v.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
 	return v
 }
 
 func (v *Verifier) Verify(r *http.Request) error {
+	path := r.URL.Path
+
 	if v.publicHost != "" && !strings.EqualFold(r.Host, v.publicHost) {
+		v.logger.Warn("rejected request: host mismatch",
+			"host", r.Host,
+			"expected", v.publicHost,
+			"path", path,
+		)
+
 		return ErrAccessDenied
 	}
 
 	keyPairID := cookieValue(r, "CloudFront-Key-Pair-Id")
 	if keyPairID == "" {
+		v.logger.Debug("rejected request: missing key-pair-id", "path", path)
+
 		return ErrMissingKeyPairID
 	}
 
 	key, ok := v.keys[keyPairID]
 	if !ok {
+		v.logger.Warn("rejected request: unknown key-pair-id",
+			"keyPairId", keyPairID,
+			"path", path,
+		)
+
 		return ErrAccessDenied
 	}
 
 	signature := cookieValue(r, "CloudFront-Signature")
 	if signature == "" {
+		v.logger.Debug("rejected request: missing signature", "keyPairId", keyPairID, "path", path)
+
 		return ErrAccessDenied
 	}
 
 	policyVal := cookieValue(r, "CloudFront-Policy")
 	if policyVal == "" {
+		v.logger.Debug("rejected request: missing policy", "keyPairId", keyPairID, "path", path)
+
 		return ErrAccessDenied
 	}
 
 	policyJSON, err := base64Decode(policyVal)
 	if err != nil {
+		v.logger.Warn("rejected request: invalid policy base64",
+			"keyPairId", keyPairID, "path", path, "err", err,
+		)
+
 		return ErrAccessDenied
 	}
 
 	sigBytes, err := base64Decode(signature)
 	if err != nil {
+		v.logger.Warn("rejected request: invalid signature base64",
+			"keyPairId", keyPairID, "path", path, "err", err,
+		)
+
 		return ErrAccessDenied
 	}
 
 	// The signature is over the raw JSON policy (before base64 encoding). Verify it before parsing any
 	// attacker-controlled policy fields, so unauthenticated requests cannot force JSON parsing work.
 	if !verifySig(key, policyJSON, sigBytes) {
+		v.logger.Warn("rejected request: signature verification failed",
+			"keyPairId", keyPairID,
+			"path", path,
+		)
+
 		return ErrAccessDenied
 	}
 
 	var p policy
 	if err := json.Unmarshal(policyJSON, &p); err != nil || len(p.Statement) == 0 {
+		v.logger.Warn("rejected request: invalid policy JSON", "keyPairId", keyPairID, "path", path)
+
 		return ErrAccessDenied
 	}
 
 	resource := p.Statement[0].Resource
 	expiresAt := p.Statement[0].Condition.DateLessThan.AwsEpochTime
 	if resource == "" || expiresAt == 0 {
+		v.logger.Warn("rejected request: policy missing resource or expiry", "keyPairId", keyPairID, "path", path)
+
 		return ErrAccessDenied
 	}
 
 	if time.Now().After(time.Unix(expiresAt, 0).Add(v.clockSkew)) {
+		v.logger.Debug("rejected request: policy expired",
+			"keyPairId", keyPairID,
+			"expiresAt", time.Unix(expiresAt, 0),
+			"path", path,
+		)
+
 		return ErrAccessDenied
 	}
 
 	if !v.resourceMatches(r, resource) {
+		v.logger.Warn("rejected request: resource mismatch",
+			"keyPairId", keyPairID,
+			"resource", resource,
+			"host", r.Host,
+			"path", path,
+		)
+
 		return ErrAccessDenied
 	}
 
