@@ -2,13 +2,13 @@
 
 Cloudfront emulator for Garage/S3 and LibreChat enabling "cookies" image signing.
 
-> ## ⚠️ TLS is expected to terminate at a reverse proxy
->
-> This service is designed to sit **behind a reverse proxy** (Nginx, Caddy, NPM, etc.) that terminates TLS. Signed
+> Warning!
+
+> This service is designed to sit behind a reverse proxy (Nginx, Caddy, NPM, etc.) that terminates TLS. Signed
 > cookies are marked `Secure` + `SameSite=None`, which browsers will only transmit over HTTPS.
 >
 > If you expose this service over plain HTTP directly (i.e. reachable at `http://` from a browser), signed cookies
-> will **not** work, and any traffic to it will be unencrypted. Ensure the proxy enforces HTTPS at the DNS/edge
+> will _not_ work, and any traffic to it will be unencrypted. Ensure the proxy enforces HTTPS at the DNS/edge
 > level and forwards requests to this service over a trusted internal network.
 >
 > You may need to adjust access lists, if applicable, such that both Librechat and trusted devices can access
@@ -19,7 +19,49 @@ Cloudfront emulator for Garage/S3 and LibreChat enabling "cookies" image signing
 >
 > To verify cookie policies signed over `https://` URLs, the browser will only transmit cookies over HTTPS.
 
-See [`docs/DIVERGENCES.md`](docs/DIVERGENCES.md) for more information.
+## What It Does
+
+Garagefront is a read-only stand-in for CloudFront. It serves two kinds of object, fetched from S3/Garage with
+SigV4-signed `GetObject` requests, and only after verifying a CloudFront signed cookie:
+
+- `/i/...` private images, scoped to a user
+- `/a/...` avatars, scoped to a tenant
+
+The object key equals the request path (the leading `i`/`a` segment is part of the key), so `/i/images/user/file.png`
+fetches the S3 object `i/images/user/file.png`. Region-aware paths (`/i/r/<region>/...`) work when LibreChat is
+configured with `includeRegionInPath`.
+
+Responses echo the object's `Content-Type`, `Content-Length`, `ETag`, and `Last-Modified`, plus a long
+`Cache-Control: public, max-age=31536000, immutable`.
+
+## LibreChat Configuration
+
+Point LibreChat at Garagefront with `fileStrategies` and a `cloudfront` block in `librechat.yaml`:
+
+```yaml
+fileStrategies:
+    default: s3
+    avatar: cloudfront
+    image: cloudfront
+    document: s3
+    skills: s3
+
+cloudfront:
+    domain: "https://cdn.example.com"
+    imageSigning: cookies
+    cookieDomain: ".example.com"
+    cookieExpiry: 1800
+    urlExpiry: 3600
+    requireSignedAccess: true
+    invalidateOnDelete: false
+```
+
+`cloudfront.domain` must be the public host Garagefront serves (its `PUBLIC_HOST`), and `cookieDomain` must be a
+parent of that host so the browser sends the signed cookies (see the TLS note above).
+
+The CloudFront key pair is split across the two sides: the **private** key and key-pair ID go to LibreChat via the
+`CLOUDFRONT_KEY_PAIR_ID` and `CLOUDFRONT_PRIVATE_KEY` environment variables, and the **public** key plus the same
+key-pair ID go to Garagefront via `TRUSTED_SIGNERS` (below).
 
 ## Deployment
 
@@ -37,7 +79,6 @@ openssl genrsa -out private.pem 2048
 openssl rsa -in private.pem -outform PEM -pubout -out public.pem
 ```
 
-The private key goes to LibreChat (`CLOUDFRONT_PRIVATE_KEY`); the public key is referenced here via `TRUSTED_SIGNERS`.
 Signer keys shorter than `MIN_RSA_KEY_BITS` (default 2048) are rejected.
 
 ### Algorithm
