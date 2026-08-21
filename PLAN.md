@@ -9,6 +9,13 @@ Units are ordered by dependency: config and key material first, then the Garage 
 path, then cookie verification, then the HTTPS surface, then end-to-end integration. Each
 unit is independently verifiable and can be merged in sequence.
 
+Whenever possible and logical to do so, write unitary tests for each unit or sub-unit.
+Write tests only if they have value to exist, e.g., would prevent regression failure from
+future iterations or changes. Run tests at the end of each unit.
+
+When you have completed a unit, modify this document to show that you have and the proof
+of completion of an AC. Simple/quick is acceptable; the proof is in the code.
+
 ---
 
 ## U1 — Configuration and trusted signer loading
@@ -34,6 +41,18 @@ unit is independently verifiable and can be merged in sequence.
 2. A valid PEM RSA public key is parsed into a `*rsa.PublicKey` and associated with its
    `Key-Pair-Id`; a malformed/empty key produces an error.
 3. `go test ./internal/config/...` passes.
+4. README.md is updated to include how to run things _so far_.
+
+**Status: COMPLETE**
+
+- AC1 — `internal/config/config.go` loads `PUBLIC_HOST`, `GARAGE_ENDPOINT`, `GARAGE_BUCKET`
+  (and other settings) with defaults and returns a descriptive error listing the missing
+  keys. Covered by `TestLoadRequiredFields` and `TestLoadMissingRequiredFields`.
+- AC2 — `internal/config/trusted_signers.go` parses PKIX/PKCS#1 PEM public keys into
+  `*rsa.PublicKey`, keyed by Key-Pair-Id. Covered by `TestLoadTrustedSigners` (PKIX + PKCS#1),
+  `TestLoadTrustedSignersEmpty`, and `TestLoadTrustedSignersMalformed`.
+- AC3 — `go test ./internal/config/...` passes (also `go build ./...`, `go vet ./...`).
+- AC4 — `README.md` documents required settings, trusted-signer format, and how to run.
 
 ---
 

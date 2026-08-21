@@ -2,30 +2,45 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strconv"
+
+	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Host string
-	Port int
+	Host string `env:"HOST" envDefault:"0.0.0.0"`
+	Port int    `env:"PORT" envDefault:"8080"`
+
+	// Public hostname and TLS. PublicHost must equal the host portion of the CloudFront domain; CookieDomain is the
+	// domain the signed cookies are scoped to (e.g. ".example.com").
+	PublicHost   string `env:"PUBLIC_HOST,required"`
+	TLSCertFile  string `env:"TLS_CERT_FILE"`
+	TLSKeyFile   string `env:"TLS_KEY_FILE"`
+	CookieDomain string `env:"COOKIE_DOMAIN"`
+
+	S3Endpoint          string `env:"S3_ENDPOINT,required"`
+	S3AccessKey         string `env:"S3_ACCESS_KEY"`
+	S3SecretKey         string `env:"S3_SECRET_KEY"`
+	S3Bucket            string `env:"S3_BUCKET,required"`
+	S3Region            string `env:"S3_REGION"`
+	IncludeRegionInPath bool   `env:"INCLUDE_REGION_IN_PATH" envDefault:"false"`
+
+	// Verification knobs.
+	ClockSkewSeconds int `env:"CLOCK_SKEW_SECONDS" envDefault:"60"`
+
+	// Trusted signer public keys, keyed by CloudFront Key-Pair-Id.
+	TrustedSigners TrustedSigners `env:"TRUSTED_SIGNERS"`
 }
 
-func Load() Config {
-	port := 8080
-	if v, err := strconv.Atoi(os.Getenv("PORT")); err == nil {
-		port = v
+func Load() (Config, error) {
+	_ = godotenv.Load()
+
+	var cfg Config
+	if err := env.Parse(&cfg); err != nil {
+		return Config{}, fmt.Errorf("parse environment: %w", err)
 	}
 
-	host := os.Getenv("HOST")
-	if host == "" {
-		host = "0.0.0.0"
-	}
-
-	return Config{
-		Host: host,
-		Port: port,
-	}
+	return cfg, nil
 }
 
 func (c Config) Addr() string {
