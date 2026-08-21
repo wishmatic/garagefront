@@ -20,8 +20,8 @@ type Config struct {
 	ForceSchemeHTTPS bool `env:"FORCE_SCHEME_HTTPS" envDefault:"true"`
 
 	S3Endpoint  string `env:"S3_ENDPOINT,required"`
-	S3AccessKey string `env:"S3_ACCESS_KEY"`
-	S3SecretKey string `env:"S3_SECRET_KEY"`
+	S3AccessKey string `env:"S3_ACCESS_KEY,required"`
+	S3SecretKey string `env:"S3_SECRET_KEY,required"`
 	S3Bucket    string `env:"S3_BUCKET,required"`
 	S3Region    string `env:"S3_REGION,required"`
 

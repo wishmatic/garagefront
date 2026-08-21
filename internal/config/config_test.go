@@ -26,6 +26,8 @@ func TestLoadRequiredFields(t *testing.T) {
 
 	set("PUBLIC_HOST", "cdn.example.com")
 	set("S3_ENDPOINT", "https://s3.example.com")
+	set("S3_ACCESS_KEY", "access-key")
+	set("S3_SECRET_KEY", "secret-key")
 	set("S3_BUCKET", "my-bucket")
 	set("S3_REGION", "garage")
 
@@ -60,7 +62,7 @@ func TestLoadRequiredFields(t *testing.T) {
 func TestLoadMissingRequiredFields(t *testing.T) {
 	t.Cleanup(func() {
 		for _, k := range []string{
-			"PUBLIC_HOST", "S3_ENDPOINT", "S3_BUCKET", "TRUSTED_SIGNERS",
+			"PUBLIC_HOST", "S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET", "S3_REGION", "TRUSTED_SIGNERS",
 		} {
 			_ = os.Unsetenv(k)
 		}
@@ -70,15 +72,18 @@ func TestLoadMissingRequiredFields(t *testing.T) {
 		name string
 		set  map[string]string
 	}{
-		{"missing PUBLIC_HOST", map[string]string{"S3_ENDPOINT": "e", "S3_BUCKET": "b", "S3_REGION": "r"}},
-		{"missing S3_ENDPOINT", map[string]string{"PUBLIC_HOST": "h", "S3_BUCKET": "b", "S3_REGION": "r"}},
-		{"missing S3_BUCKET", map[string]string{"PUBLIC_HOST": "h", "S3_ENDPOINT": "e", "S3_REGION": "r"}},
-		{"missing S3_REGION", map[string]string{"PUBLIC_HOST": "h", "S3_ENDPOINT": "e", "S3_BUCKET": "b"}},
+		{"missing PUBLIC_HOST", map[string]string{"S3_ENDPOINT": "e", "S3_ACCESS_KEY": "a", "S3_SECRET_KEY": "s", "S3_BUCKET": "b", "S3_REGION": "r"}},
+		{"missing S3_ENDPOINT", map[string]string{"PUBLIC_HOST": "h", "S3_ACCESS_KEY": "a", "S3_SECRET_KEY": "s", "S3_BUCKET": "b", "S3_REGION": "r"}},
+		{"missing S3_ACCESS_KEY", map[string]string{"PUBLIC_HOST": "h", "S3_ENDPOINT": "e", "S3_SECRET_KEY": "s", "S3_BUCKET": "b", "S3_REGION": "r"}},
+		{"missing S3_SECRET_KEY", map[string]string{"PUBLIC_HOST": "h", "S3_ENDPOINT": "e", "S3_ACCESS_KEY": "a", "S3_BUCKET": "b", "S3_REGION": "r"}},
+		{"missing S3_BUCKET", map[string]string{"PUBLIC_HOST": "h", "S3_ENDPOINT": "e", "S3_ACCESS_KEY": "a", "S3_SECRET_KEY": "s", "S3_REGION": "r"}},
+		{"missing S3_REGION", map[string]string{"PUBLIC_HOST": "h", "S3_ENDPOINT": "e", "S3_ACCESS_KEY": "a", "S3_SECRET_KEY": "s", "S3_BUCKET": "b"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, k := range []string{"PUBLIC_HOST", "S3_ENDPOINT", "S3_BUCKET", "S3_REGION"} {
+			for _, k := range []string{"PUBLIC_HOST", "S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET", "S3_REGION"} {
 				_ = os.Unsetenv(k)
 			}
+
 			for k, v := range tc.set {
 				_ = os.Setenv(k, v)
 			}
@@ -104,9 +109,11 @@ func TestLoadTrustedSigners(t *testing.T) {
 	if len(signers) != 2 {
 		t.Fatalf("got %d signers, want 2", len(signers))
 	}
+
 	if _, ok := signers["APKA1"]; !ok {
 		t.Errorf("missing signer APKA1")
 	}
+
 	if _, ok := signers["APKA2"]; !ok {
 		t.Errorf("missing signer APKA2")
 	}
@@ -177,7 +184,7 @@ func writePEM(t *testing.T, dir, name, blockType string, der []byte) string {
 func TestLoadRejectsWeakSignerKey(t *testing.T) {
 	t.Cleanup(func() {
 		for _, k := range []string{
-			"PUBLIC_HOST", "S3_ENDPOINT", "S3_BUCKET", "TRUSTED_SIGNERS", "MIN_RSA_KEY_BITS",
+			"PUBLIC_HOST", "S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET", "S3_REGION", "TRUSTED_SIGNERS", "MIN_RSA_KEY_BITS",
 		} {
 			_ = os.Unsetenv(k)
 		}
@@ -193,6 +200,8 @@ func TestLoadRejectsWeakSignerKey(t *testing.T) {
 
 	_ = os.Setenv("PUBLIC_HOST", "cdn.example.com")
 	_ = os.Setenv("S3_ENDPOINT", "https://s3.example.com")
+	_ = os.Setenv("S3_ACCESS_KEY", "access-key")
+	_ = os.Setenv("S3_SECRET_KEY", "secret-key")
 	_ = os.Setenv("S3_BUCKET", "my-bucket")
 	_ = os.Setenv("S3_REGION", "garage")
 	_ = os.Setenv("TRUSTED_SIGNERS", "APKA1="+path)
