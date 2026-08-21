@@ -7,10 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -22,21 +20,17 @@ type Verifier struct {
 	forceSchemeHTTPS bool
 }
 
+// policy mirrors the JSON policy signed into CloudFront-Policy. LibreChat emits exactly one Statement with a Resource
+// and a DateLessThan condition; we parse only those fields.
 type policy struct {
-	Statements []statement `json:"Statement"`
-}
-
-type statement struct {
-	Resource  string    `json:"Resource"`
-	Condition condition `json:"Condition"`
-}
-
-type condition struct {
-	DateLessThan dateLessThan `json:"DateLessThan"`
-}
-
-type dateLessThan struct {
-	AwsEpochTime int64 `json:"AWS:EpochTime"`
+	Statement []struct {
+		Resource  string `json:"Resource"`
+		Condition struct {
+			DateLessThan struct {
+				AwsEpochTime int64 `json:"AWS:EpochTime"`
+			} `json:"DateLessThan"`
+		} `json:"Condition"`
+	} `json:"Statement"`
 }
 
 type VerifierOption func(*Verifier)
@@ -85,46 +79,23 @@ func (v *Verifier) Verify(r *http.Request) error {
 	}
 
 	policyVal := cookieValue(r, "CloudFront-Policy")
-	expiresVal := cookieValue(r, "CloudFront-Expires")
-
-	var payload []byte
-	var resources []string
-	var expiresAt int64
-
-	switch {
-	case policyVal != "":
-		payload = []byte(policyVal)
-
-		decoded, err := base64Decode(policyVal)
-		if err != nil {
-			return ErrAccessDenied
-		}
-
-		var p policy
-		if err := json.Unmarshal(decoded, &p); err != nil || len(p.Statements) == 0 {
-			return ErrAccessDenied
-		}
-
-		for _, s := range p.Statements {
-			resources = append(resources, s.Resource)
-			if s.Condition.DateLessThan.AwsEpochTime > expiresAt {
-				expiresAt = s.Condition.DateLessThan.AwsEpochTime
-			}
-		}
-	case expiresVal != "":
-		expires, err := strconv.ParseInt(expiresVal, 10, 64)
-		if err != nil {
-			return ErrAccessDenied
-		}
-
-		expiresAt = expires
-
-		payload, resources = v.cannedPolicy(r, expires)
-	default:
+	if policyVal == "" {
 		return ErrAccessDenied
 	}
 
-	if expiresAt == 0 {
+	policyJSON, err := base64Decode(policyVal)
+	if err != nil {
+		return ErrAccessDenied
+	}
+
+	var p policy
+	if err := json.Unmarshal(policyJSON, &p); err != nil || len(p.Statement) == 0 {
+		return ErrAccessDenied
+	}
+
+	resource := p.Statement[0].Resource
+	expiresAt := p.Statement[0].Condition.DateLessThan.AwsEpochTime
+	if resource == "" || expiresAt == 0 {
 		return ErrAccessDenied
 	}
 
@@ -133,7 +104,8 @@ func (v *Verifier) Verify(r *http.Request) error {
 		return ErrAccessDenied
 	}
 
-	if !verifySig(key, payload, sigBytes) {
+	// The signature is over the raw JSON policy (before base64 encoding).
+	if !verifySig(key, policyJSON, sigBytes) {
 		return ErrAccessDenied
 	}
 
@@ -141,58 +113,35 @@ func (v *Verifier) Verify(r *http.Request) error {
 		return ErrAccessDenied
 	}
 
-	if !v.resourceMatches(r, resources) {
+	if !v.resourceMatches(r, resource) {
 		return ErrAccessDenied
 	}
 
 	return nil
 }
 
-func (v *Verifier) cannedPolicy(r *http.Request, expires int64) ([]byte, []string) {
-	resource := fmt.Sprintf("%s://%s%s", v.scheme(r), r.Host, r.URL.Path)
-
-	doc := policy{
-		Statements: []statement{
-			{
-				Resource: resource,
-				Condition: condition{
-					DateLessThan: dateLessThan{AwsEpochTime: expires},
-				},
-			},
-		},
-	}
-	b, _ := json.Marshal(doc)
-
-	return b, []string{resource}
-}
-
+// verifySig verifies the RSA PKCS#1 v1.5 signature over payload. LibreChat signs with SHA-1 by default (it never
+// passes `algorithm` to @aws-sdk/cloudfront-signer), so SHA-1 is tried first; SHA-256 is kept for forward
+// compatibility.
 func verifySig(key *rsa.PublicKey, payload, sig []byte) bool {
-	hashed := sha256.Sum256(payload)
-
-	if rsa.VerifyPKCS1v15(key, crypto.SHA256, hashed[:], sig) == nil {
+	sha1Hashed := sha1.Sum(payload)
+	if rsa.VerifyPKCS1v15(key, crypto.SHA1, sha1Hashed[:], sig) == nil {
 		return true
 	}
 
-	sha1Hashed := sha1.Sum(payload)
-
-	return rsa.VerifyPKCS1v15(key, crypto.SHA1, sha1Hashed[:], sig) == nil
+	hashed := sha256.Sum256(payload)
+	return rsa.VerifyPKCS1v15(key, crypto.SHA256, hashed[:], sig) == nil
 }
 
-func (v *Verifier) resourceMatches(r *http.Request, resources []string) bool {
-	for _, res := range resources {
-		u, err := url.Parse(res)
-		if err != nil {
-			continue
-		}
-		if u.Scheme != v.scheme(r) || u.Host != r.Host {
-			continue
-		}
-		if globMatch(u.Path, r.URL.Path) {
-			return true
-		}
+func (v *Verifier) resourceMatches(r *http.Request, resource string) bool {
+	u, err := url.Parse(resource)
+	if err != nil {
+		return false
 	}
-
-	return false
+	if u.Scheme != v.scheme(r) || u.Host != r.Host {
+		return false
+	}
+	return globMatch(u.Path, r.URL.Path)
 }
 
 func (v *Verifier) scheme(r *http.Request) string {
@@ -212,7 +161,6 @@ func globMatch(pattern, target string) bool {
 	if !strings.Contains(pattern, "*") {
 		return pattern == target
 	}
-
 	return globMatchRecursive(pattern, target)
 }
 
@@ -234,7 +182,6 @@ func globMatchRecursive(pattern, target string) bool {
 			target = target[1:]
 		}
 	}
-
 	return len(target) == 0
 }
 
@@ -243,20 +190,14 @@ func cookieValue(r *http.Request, name string) string {
 	if err != nil {
 		return ""
 	}
-
 	return c.Value
 }
 
+// base64Decode decodes the CloudFront base64 variant, which differs from both
+// standard and URL-safe base64: '+' -> '-', '/' -> '~', '=' -> '_'.
 func base64Decode(s string) ([]byte, error) {
 	s = strings.ReplaceAll(s, "-", "+")
-	s = strings.ReplaceAll(s, "_", "/")
-
-	switch len(s) % 4 {
-	case 2:
-		s += "=="
-	case 3:
-		s += "="
-	}
-
+	s = strings.ReplaceAll(s, "~", "/")
+	s = strings.ReplaceAll(s, "_", "=")
 	return base64.StdEncoding.DecodeString(s)
 }

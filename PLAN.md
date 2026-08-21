@@ -73,19 +73,21 @@ of completion of an AC. Simple/quick is acceptable; the proof is in the code.
 
 **Acceptance criteria**
 
-1. `mapPath("/i/foo/bar.png", false)` returns key `foo/bar.png`; with region enabled
-   `/i/r/us-east/foo/bar.png` → `foo/bar.png`.
+1. `MapPath("/i/foo/bar.png")` returns key `i/foo/bar.png` (identity mapping — the leading
+   namespace prefix is part of the object key).
 2. Path traversal attempts (`/i/../../etc/passwd`, `%2e%2e`) are rejected or sanitized.
-3. `mapStorageError(NoSuchKey)` → `ErrNotFound`; `mapStorageError(AccessDenied)` →
+3. `MapStorageError(NoSuchKey)` → `ErrNotFound`; `MapStorageError(AccessDenied)` →
    `ErrForbidden`.
 4. `go test ./internal/storage/...` passes.
 
-**Status: COMPLETE**
+**Status: COMPLETE (revised)**
 
-- AC1 — `storage.MapPath` in `internal/storage/path.go` maps `/i/foo/bar.png` → `foo/bar.png`
-  and `/i/r/us-east/foo/bar.png` → `foo/bar.png` (region variant) when enabled. Covered by
-  `TestMapPathImages`, `TestMapPathAvatars`, `TestMapPathRegionVariant`,
-  `TestMapPathRegionVariantDisabled`.
+- AC1 — `storage.MapPath` in `internal/storage/path.go` is an identity mapping: the object key
+  equals the URL path minus its leading slash, including the `i`/`a` namespace prefix and any
+  `r/<region>`/`t/<tenant>` segments. This matches LibreChat's `getS3Key` + `buildCloudFrontUrl`,
+  which store objects under keys beginning with `i`/`a`. Covered by `TestMapPathIdentity`,
+  `TestMapPathRegionTenant`, `TestMapPathAvatar`, `TestMapPathURLEncodedKey`.
+  (The earlier prefix-stripping behavior was corrected after tracing LibreChat's actual key layout.)
 - AC2 — traversal (`..` and `%2e%2e`) is rejected as `ErrInvalidKey`. Covered by
   `TestMapPathTraversal` and `TestMapPathInvalidPrefix`.
 - AC3 — `storage.MapStorageError` maps `NoSuchKey` → `ErrNotFound` and `AccessDenied` →
@@ -102,23 +104,23 @@ S3 XML error-code parsing (`parseErrorCode`) to drive status mapping.
 
 **What**
 
-- Add `internal/cookie` (or `internal/signverify`) package with a verifier:
-    - Extract `CloudFront-Key-Pair-Id`, `CloudFront-Signature`, and either
-      `CloudFront-Expires` (canned) or `CloudFront-Policy` (custom) from the request cookies.
+- Add `internal/cookie` package with a verifier:
+    - Extract `CloudFront-Key-Pair-Id`, `CloudFront-Signature`, and `CloudFront-Policy`
+      (custom policy only) from the request cookies.
     - Look up the public key by `Key-Pair-Id`.
-    - Verify RSA PKCS#1 v1.5 signature over the exact payload, trying **both SHA-1 and
-      SHA-256** (`rsa.VerifyPKCS1v15`).
-    - Custom policy: decode the base64 `CloudFront-Policy` value, parse the JSON, read
-      `Statement[].Resource` and `Condition.DateLessThan.AWS:EpochTime`; verify the signature
-      over the **raw value as-is** (no JSON reconstruction).
-    - Canned policy: reconstruct the canonical policy JSON byte-exactly from the request URL
-      and `CloudFront-Expires`.
+    - Verify RSA PKCS#1 v1.5 signature over the raw JSON policy (decoded from
+      `CloudFront-Policy`), trying **SHA-1 first, then SHA-256** (`rsa.VerifyPKCS1v15`).
+    - Decode the CloudFront base64 variant (`+`→`-`, `/`→`~`, `=`→`_`).
+    - Parse `Statement[].Resource` and `Condition.DateLessThan.AWS:EpochTime`; verify the
+      signature over the raw (decoded) policy JSON as-is.
     - Check expiry > now with clock-skew tolerance.
     - Resource matching: scheme exact, host exact, path globbed (wildcard `*`).
-    - Handle base64 variants (standard vs URL-safe, with/without padding) and empty/missing
-      cookie cases.
+    - Reject empty/missing cookie cases.
 - Return a structured `ErrUnauthorized` (with a reason like `Missing Key-Pair-Id` /
   `Access Denied`) that the HTTP layer maps to 403.
+
+Explicitly **not** supported (LibreChat does not use them): canned policies
+(`CloudFront-Expires`), `DateGreaterThan`, `IpAddress`, and multi-statement policies.
 
 **Acceptance criteria**
 
@@ -127,28 +129,28 @@ S3 XML error-code parsing (`parseErrorCode`) to drive status mapping.
 2. A signature produced with a different key, or tampered payload, fails verification.
 3. A custom policy with wildcard resource `https://cdn.example.com/i/*` matches
    `https://cdn.example.com/i/user/1.png` and rejects `https://cdn.example.com/a/x.png`.
-4. An expired `DateLessThan`/`Expires` timestamp is rejected; a timestamp within the
-   configured clock-skew window is accepted.
-5. URL-safe base64 and unpadded values are handled identically to standard base64.
-6. Missing `CloudFront-Signature` or `CloudFront-Key-Pair-Id` yields the `Missing
-Key-Pair-Id` / `Access Denied` error.
+4. An expired `DateLessThan` timestamp is rejected; a timestamp within the configured
+   clock-skew window is accepted.
+5. CloudFront base64 variants are decoded correctly.
+6. Missing `CloudFront-Signature`, `CloudFront-Policy`, or `CloudFront-Key-Pair-Id` yields
+   the `Missing Key-Pair-Id` / `Access Denied` error.
 7. `go test ./internal/cookie/...` passes.
 
-**Status: COMPLETE**
+**Status: COMPLETE (revised)**
 
-- AC1 — `verifySig` tries SHA-256 then SHA-1. Covered by `TestVerifyCustomPolicySHA256`
-  and `TestVerifyCustomPolicySHA1`.
+- AC1 — `verifySig` tries SHA-1 then SHA-256. Covered by `TestVerifySHA1` and `TestVerifySHA256`.
 - AC2 — wrong key / tampered payload fail. Covered by `TestVerifyWrongKey` and
   `TestVerifyTamperedPayload`.
 - AC3 — wildcard and exact resource matching. Covered by `TestResourceMatching`.
 - AC4 — expiry with clock skew. Covered by `TestExpiry`.
-- AC5 — base64 variants. Covered by `TestBase64Variants`.
+- AC5 — CloudFront base64 variant. Covered by the `cfBase64` helper used across all tests.
 - AC6 — missing/wrong fields. Covered by `TestMissingFields`.
 - AC7 — `go test ./internal/cookie/...` passes.
 
-Notes: custom policy signature is verified over the raw `CloudFront-Policy` cookie value
-(not reconstructed); canned policy is reconstructed via ordered structs to match AWS
-canonical JSON. Wildcard `*` matches across path separators.
+Notes: the signature is verified over the raw JSON policy (decoded from `CloudFront-Policy`),
+matching how `@aws-sdk/cloudfront-signer` signs it. Canned policies, `DateGreaterThan`,
+`IpAddress`, and multi-statement handling were dropped. LibreChat signs with SHA-1 by default;
+SHA-256 is kept as a fallback.
 
 ---
 

@@ -3,18 +3,22 @@ package storage
 import (
 	"fmt"
 	"net/url"
-	"path"
 	"slices"
 	"strings"
 )
 
 // MapPath converts a request URL path into an object key.
 //
-// Served prefixes are "/i/" (images) and "/a/" (avatars). When includeRegionInPath is true, the path may additionally
-// carry a region segment "/r/<region>/" immediately after the prefix, which is stripped from the key.
-func MapPath(p string, includeRegionInPath bool) (string, error) {
-	// Decode the path. Reject malformed percent-encoding.
-
+// LibreChat stores inline images/avatars under object keys that begin with the "i"/"a" namespace prefix, and its
+// CloudFront URLs are just "<domain>/<key>". So the mapping is identity: the URL path (minus its leading slash) is
+// the object key. The region/tenant segments, when present, appear in both the URL and the key identically.
+//
+//	URL  /i/r/us-east-2/t/tenantA/images/user123/file.png
+//	key   i/r/us-east-2/t/tenantA/images/user123/file.png
+//
+// The only validation is that the path begins with a known namespace ("i" or "a") and contains no path-traversal
+// segments.
+func MapPath(p string) (string, error) {
 	decoded, err := url.PathUnescape(p)
 	if err != nil {
 		return "", fmt.Errorf("decode path: %w", err)
@@ -26,8 +30,6 @@ func MapPath(p string, includeRegionInPath bool) (string, error) {
 		return "", ErrInvalidKey
 	}
 
-	// Expect at least a prefix and one key segment.
-
 	if len(segments) < 2 {
 		return "", ErrInvalidKey
 	}
@@ -38,22 +40,9 @@ func MapPath(p string, includeRegionInPath bool) (string, error) {
 		return "", ErrInvalidKey
 	}
 
-	rest := segments[1:]
-	if includeRegionInPath {
-		if len(rest) >= 2 && rest[0] == "r" {
-			rest = rest[2:]
-		}
-	}
-
-	if len(rest) == 0 {
-		return "", ErrInvalidKey
-	}
-
-	return path.Join(rest...), nil
+	return strings.Join(segments, "/"), nil
 }
 
-// splitPath splits on "/" and drops empty segments (leading/trailing/double slashes), so "/i/a/b/" and "/i//a/b"
-// behave consistently.
 func splitPath(p string) []string {
 	parts := strings.Split(p, "/")
 	out := make([]string, 0, len(parts))

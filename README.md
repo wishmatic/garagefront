@@ -19,6 +19,8 @@ Cloudfront emulator for Garage/S3 and LibreChat enabling "cookies" image signing
 >
 > To verify cookie policies signed over `https://` URLs, the browser will only transmit cookies over HTTPS.
 
+See [`docs/DIVERGENCES.md`](docs/DIVERGENCES.md) for more information.
+
 ## Deployment
 
 Deploy as a Docker container. You will need to specify the envars present in the `.env.example` file.
@@ -38,13 +40,24 @@ openssl rsa -in private.pem -outform PEM -pubout -out public.pem
 The private key goes to LibreChat (`CLOUDFRONT_PRIVATE_KEY`); the public key is referenced here via `TRUSTED_SIGNERS`.
 Signer keys shorter than `MIN_RSA_KEY_BITS` (default 2048) are rejected.
 
-### Clock skew
+### Algorithm
+
+LibreChat signs CloudFront cookies with **SHA-1** by default (it does not pass an `algorithm` to
+`@aws-sdk/cloudfront-signer`). This service therefore verifies SHA-1 signatures, with SHA-256 accepted as a fallback
+for forward compatibility.
+
+### Divergences
+
+This is an emulator, not a full CloudFront replacement. See [`docs/DIVERGENCES.md`](docs/DIVERGENCES.md) for the
+differences you should be aware of before deploying.
+
+### Clock Skew
 
 Signed cookies carry an absolute expiry. To tolerate a small difference between the clocks of LibreChat (the signer)
 and this service, `CLOCK_SKEW_SECONDS` (default 60) accepts a token that is past its expiry by up to that many
 seconds. This effectively extends cookie lifetime by that amount; set it to `0` if you want strict expiry.
 
-### Scheme handling
+### Scheme Handling
 
 `FORCE_SCHEME_HTTPS` (default `true`) makes the verifier treat every request as `https`, which is required when TLS
 terminates at the reverse proxy. Set it to `false` only if TLS terminates at this service itself.
