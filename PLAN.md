@@ -11,7 +11,7 @@ unit is independently verifiable and can be merged in sequence.
 
 Whenever possible and logical to do so, write unitary tests for each unit or sub-unit.
 Write tests only if they have value to exist, e.g., would prevent regression failure from
-future iterations or changes. Run tests at the end of each unit.
+future iterations or changes. Run tests at the end of each unit, as well as a build.
 
 When you have completed a unit, modify this document to show that you have and the proof
 of completion of an AC. Simple/quick is acceptable; the proof is in the code.
@@ -79,6 +79,22 @@ of completion of an AC. Simple/quick is acceptable; the proof is in the code.
 3. `mapStorageError(NoSuchKey)` → `ErrNotFound`; `mapStorageError(AccessDenied)` →
    `ErrForbidden`.
 4. `go test ./internal/storage/...` passes.
+
+**Status: COMPLETE**
+
+- AC1 — `storage.MapPath` in `internal/storage/path.go` maps `/i/foo/bar.png` → `foo/bar.png`
+  and `/i/r/us-east/foo/bar.png` → `foo/bar.png` (region variant) when enabled. Covered by
+  `TestMapPathImages`, `TestMapPathAvatars`, `TestMapPathRegionVariant`,
+  `TestMapPathRegionVariantDisabled`.
+- AC2 — traversal (`..` and `%2e%2e`) is rejected as `ErrInvalidKey`. Covered by
+  `TestMapPathTraversal` and `TestMapPathInvalidPrefix`.
+- AC3 — `storage.MapStorageError` maps `NoSuchKey` → `ErrNotFound` and `AccessDenied` →
+  `ErrForbidden` (`internal/storage/errors.go`). Covered by `TestMapStorageError`.
+- AC4 — `go test ./internal/storage/...` passes (also `go build ./...`, `go vet ./...`).
+
+Additional: `internal/storage/client.go` implements a SigV4-signed S3 client (`Get`/`Head`)
+returning an `Object` with `Content-Type`, `Content-Length`, `ETag`, `Last-Modified`, plus
+S3 XML error-code parsing (`parseErrorCode`) to drive status mapping.
 
 ---
 
