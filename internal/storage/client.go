@@ -108,6 +108,12 @@ func (c *Client) buildRequest(ctx context.Context, method, key string) (*http.Re
 		return nil, fmt.Errorf("new request: %w", err)
 	}
 
+	// Garage requires the X-Amz-Content-Sha256 header to be present. The bare v4.Signer folds the payload hash into
+	// the signature but does not emit this header (the higher-level S3 client does). Set it before signing so it is
+	// both sent and covered by the signature.
+
+	req.Header.Set("X-Amz-Content-Sha256", emptySHA256)
+
 	err = c.signer.SignHTTP(ctx, c.credentials, req, emptySHA256, "s3", c.region, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("sign request: %w", err)
