@@ -110,19 +110,6 @@ func doRequest(t *testing.T, s *Server, path string, cookies map[string]string) 
 	return rec
 }
 
-func TestHealthz(t *testing.T) {
-	key := newKey(t)
-	s := testServer(t, key, &fakeStore{})
-
-	rec := doRequest(t, s, "/healthz", nil)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	if rec.Body.String() != "ok" {
-		t.Errorf("body = %q, want ok", rec.Body.String())
-	}
-}
-
 func TestMissingCookieReturns403(t *testing.T) {
 	key := newKey(t)
 	s := testServer(t, key, &fakeStore{})
@@ -167,6 +154,18 @@ func TestValidCookieServesObject(t *testing.T) {
 	}
 	if rec.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
 		t.Errorf("Cache-Control = %q", rec.Header().Get("Cache-Control"))
+	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+	if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("X-Frame-Options = %q, want DENY", got)
+	}
+	if got := rec.Header().Get("Referrer-Policy"); got != "no-referrer" {
+		t.Errorf("Referrer-Policy = %q, want no-referrer", got)
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); got != "default-src 'none'" {
+		t.Errorf("Content-Security-Policy = %q, want default-src 'none'", got)
 	}
 }
 

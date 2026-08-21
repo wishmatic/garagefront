@@ -59,9 +59,17 @@ cloudfront:
 `cloudfront.domain` must be the public host Garagefront serves (its `PUBLIC_HOST`), and `cookieDomain` must be a
 parent of that host so the browser sends the signed cookies (see the TLS note above).
 
-The CloudFront key pair is split across the two sides: the **private** key and key-pair ID go to LibreChat via the
-`CLOUDFRONT_KEY_PAIR_ID` and `CLOUDFRONT_PRIVATE_KEY` environment variables, and the **public** key plus the same
+The CloudFront key pair is split across the two sides: the private key and key-pair ID go to LibreChat via the
+`CLOUDFRONT_KEY_PAIR_ID` and `CLOUDFRONT_PRIVATE_KEY` environment variables, and the public key plus the same
 key-pair ID go to Garagefront via `TRUSTED_SIGNERS` (below).
+
+### Why Only Images
+
+Only `image` and `avatar` point at `cloudfront`. The rest stay on `s3` (or `local`) because they don't need signed
+cookies: docs are downloaded on demand, so LibreChat can mint a short-lived presigned URL when you click download.
+Images and avatars are loaded inline on every page, so they need a long-lived cookie instead.
+
+Of course, you can always just use local storage for everything or deal with the occasional broken image.
 
 ## Deployment
 

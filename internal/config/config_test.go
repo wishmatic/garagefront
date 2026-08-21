@@ -15,8 +15,8 @@ func TestLoadRequiredFields(t *testing.T) {
 		for _, k := range []string{
 			"PUBLIC_HOST", "S3_ENDPOINT", "S3_BUCKET",
 			"S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_REGION",
-			"HOST", "PORT", "CLOCK_SKEW_SECONDS", "INCLUDE_REGION_IN_PATH",
-			"TRUSTED_SIGNERS", "TLS_CERT_FILE", "TLS_KEY_FILE", "COOKIE_DOMAIN",
+			"HOST", "PORT", "CLOCK_SKEW_SECONDS", "MAX_RESPONSE_BYTES",
+			"TRUSTED_SIGNERS", "TLS_CERT_FILE", "TLS_KEY_FILE",
 		} {
 			_ = os.Unsetenv(k)
 		}
@@ -27,6 +27,7 @@ func TestLoadRequiredFields(t *testing.T) {
 	set("PUBLIC_HOST", "cdn.example.com")
 	set("S3_ENDPOINT", "https://s3.example.com")
 	set("S3_BUCKET", "my-bucket")
+	set("S3_REGION", "garage")
 
 	cfg, err := Load()
 	if err != nil {
@@ -51,8 +52,8 @@ func TestLoadRequiredFields(t *testing.T) {
 	if cfg.ClockSkewSeconds != 60 {
 		t.Errorf("ClockSkewSeconds default = %d, want 60", cfg.ClockSkewSeconds)
 	}
-	if cfg.IncludeRegionInPath {
-		t.Errorf("IncludeRegionInPath default = true, want false")
+	if cfg.MaxResponseBytes != 10485760 {
+		t.Errorf("MaxResponseBytes default = %d, want 10485760", cfg.MaxResponseBytes)
 	}
 }
 
@@ -69,12 +70,13 @@ func TestLoadMissingRequiredFields(t *testing.T) {
 		name string
 		set  map[string]string
 	}{
-		{"missing PUBLIC_HOST", map[string]string{"S3_ENDPOINT": "e", "S3_BUCKET": "b"}},
-		{"missing S3_ENDPOINT", map[string]string{"PUBLIC_HOST": "h", "S3_BUCKET": "b"}},
-		{"missing S3_BUCKET", map[string]string{"PUBLIC_HOST": "h", "S3_ENDPOINT": "e"}},
+		{"missing PUBLIC_HOST", map[string]string{"S3_ENDPOINT": "e", "S3_BUCKET": "b", "S3_REGION": "r"}},
+		{"missing S3_ENDPOINT", map[string]string{"PUBLIC_HOST": "h", "S3_BUCKET": "b", "S3_REGION": "r"}},
+		{"missing S3_BUCKET", map[string]string{"PUBLIC_HOST": "h", "S3_ENDPOINT": "e", "S3_REGION": "r"}},
+		{"missing S3_REGION", map[string]string{"PUBLIC_HOST": "h", "S3_ENDPOINT": "e", "S3_BUCKET": "b"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, k := range []string{"PUBLIC_HOST", "S3_ENDPOINT", "S3_BUCKET"} {
+			for _, k := range []string{"PUBLIC_HOST", "S3_ENDPOINT", "S3_BUCKET", "S3_REGION"} {
 				_ = os.Unsetenv(k)
 			}
 			for k, v := range tc.set {
@@ -192,6 +194,7 @@ func TestLoadRejectsWeakSignerKey(t *testing.T) {
 	_ = os.Setenv("PUBLIC_HOST", "cdn.example.com")
 	_ = os.Setenv("S3_ENDPOINT", "https://s3.example.com")
 	_ = os.Setenv("S3_BUCKET", "my-bucket")
+	_ = os.Setenv("S3_REGION", "garage")
 	_ = os.Setenv("TRUSTED_SIGNERS", "APKA1="+path)
 	_ = os.Setenv("MIN_RSA_KEY_BITS", "2048")
 

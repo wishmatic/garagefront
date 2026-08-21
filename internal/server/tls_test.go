@@ -90,7 +90,6 @@ func TestServeTLS(t *testing.T) {
 		errCh <- s.Run()
 	}()
 
-	// Give the server a moment to start.
 	time.Sleep(100 * time.Millisecond)
 
 	client := &http.Client{
@@ -99,18 +98,14 @@ func TestServeTLS(t *testing.T) {
 		},
 	}
 
-	resp, err := client.Get("https://" + addr + "/healthz")
+	resp, err := client.Get("https://" + addr + "/i/probe")
 	if err != nil {
-		t.Fatalf("GET /healthz: %v", err)
+		t.Fatalf("GET /i/probe: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	if string(body) != "ok" {
-		t.Errorf("body = %q, want ok", string(body))
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.StatusCode)
 	}
 
 	_ = s.Shutdown(context.Background())

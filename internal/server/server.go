@@ -19,12 +19,13 @@ type ObjectStore interface {
 }
 
 type Server struct {
-	store    ObjectStore
-	verifier *cookie.Verifier
-	log      *log.Logger
-	tlsCert  string
-	tlsKey   string
-	http     *http.Server
+	store            ObjectStore
+	verifier         *cookie.Verifier
+	log              *log.Logger
+	tlsCert          string
+	tlsKey           string
+	maxResponseBytes int64
+	http             *http.Server
 }
 
 func New(cfg config.Config, store ObjectStore, logger *log.Logger) *Server {
@@ -36,21 +37,21 @@ func New(cfg config.Config, store ObjectStore, logger *log.Logger) *Server {
 	)
 
 	s := &Server{
-		store:    store,
-		verifier: verifier,
-		log:      logger,
-		tlsCert:  cfg.TLSCertFile,
-		tlsKey:   cfg.TLSKeyFile,
+		store:            store,
+		verifier:         verifier,
+		log:              logger,
+		tlsCert:          cfg.TLSCertFile,
+		tlsKey:           cfg.TLSKeyFile,
+		maxResponseBytes: cfg.MaxResponseBytes,
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/i/", s.handleObject)
 	mux.HandleFunc("/a/", s.handleObject)
 
 	s.http = &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           mux,
+		Handler:           securityHeaders(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -60,29 +61,46 @@ func New(cfg config.Config, store ObjectStore, logger *log.Logger) *Server {
 	return s
 }
 
-func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("ok"))
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleObject(w http.ResponseWriter, r *http.Request) {
 	if err := s.verifier.Verify(r); err != nil {
 		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+
 		return
 	}
 
 	key, err := storage.MapPath(r.URL.Path)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+
 		return
 	}
 
 	obj, err := s.store.Get(r.Context(), key)
 	if err != nil {
 		s.writeStoreError(w, err)
+
 		return
 	}
 	defer obj.Body.Close()
+
+	// Refuse known-oversized objects before committing to a response.
+
+	if s.maxResponseBytes > 0 && obj.ContentLen > s.maxResponseBytes {
+		s.log.Printf("object %q is %d bytes, exceeding max response size %d", key, obj.ContentLen, s.maxResponseBytes)
+		http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+
+		return
+	}
 
 	if obj.ContentType != "" {
 		w.Header().Set("Content-Type", obj.ContentType)
@@ -100,7 +118,14 @@ func (s *Server) handleObject(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, obj.Body)
+	if s.maxResponseBytes > 0 {
+		// Bound the streamed body as defense-in-depth. Known lengths are rejected above; this caps
+		// chunked/unknown-length responses.
+
+		_, _ = io.Copy(w, io.LimitReader(obj.Body, s.maxResponseBytes))
+	} else {
+		_, _ = io.Copy(w, obj.Body)
+	}
 }
 
 func (s *Server) writeStoreError(w http.ResponseWriter, err error) {
@@ -122,6 +147,7 @@ func (s *Server) Run() error {
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
+
 		return nil
 	}
 
@@ -129,6 +155,7 @@ func (s *Server) Run() error {
 	if err := s.http.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+
 	return nil
 }
 
