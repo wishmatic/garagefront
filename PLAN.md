@@ -134,6 +134,22 @@ S3 XML error-code parsing (`parseErrorCode`) to drive status mapping.
 Key-Pair-Id` / `Access Denied` error.
 7. `go test ./internal/cookie/...` passes.
 
+**Status: COMPLETE**
+
+- AC1 — `verifySig` tries SHA-256 then SHA-1. Covered by `TestVerifyCustomPolicySHA256`
+  and `TestVerifyCustomPolicySHA1`.
+- AC2 — wrong key / tampered payload fail. Covered by `TestVerifyWrongKey` and
+  `TestVerifyTamperedPayload`.
+- AC3 — wildcard and exact resource matching. Covered by `TestResourceMatching`.
+- AC4 — expiry with clock skew. Covered by `TestExpiry`.
+- AC5 — base64 variants. Covered by `TestBase64Variants`.
+- AC6 — missing/wrong fields. Covered by `TestMissingFields`.
+- AC7 — `go test ./internal/cookie/...` passes.
+
+Notes: custom policy signature is verified over the raw `CloudFront-Policy` cookie value
+(not reconstructed); canned policy is reconstructed via ordered structs to match AWS
+canonical JSON. Wildcard `*` matches across path separators.
+
 ---
 
 ## U4 — HTTP server and request routing

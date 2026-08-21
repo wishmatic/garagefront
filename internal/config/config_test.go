@@ -171,3 +171,31 @@ func writePEM(t *testing.T, dir, name, blockType string, der []byte) string {
 	}
 	return path
 }
+
+func TestLoadRejectsWeakSignerKey(t *testing.T) {
+	t.Cleanup(func() {
+		for _, k := range []string{
+			"PUBLIC_HOST", "S3_ENDPOINT", "S3_BUCKET", "TRUSTED_SIGNERS", "MIN_RSA_KEY_BITS",
+		} {
+			_ = os.Unsetenv(k)
+		}
+	})
+
+	dir := t.TempDir()
+
+	weak, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := writePEM(t, dir, "weak.pem", "RSA PUBLIC KEY", x509.MarshalPKCS1PublicKey(&weak.PublicKey))
+
+	_ = os.Setenv("PUBLIC_HOST", "cdn.example.com")
+	_ = os.Setenv("S3_ENDPOINT", "https://s3.example.com")
+	_ = os.Setenv("S3_BUCKET", "my-bucket")
+	_ = os.Setenv("TRUSTED_SIGNERS", "APKA1="+path)
+	_ = os.Setenv("MIN_RSA_KEY_BITS", "2048")
+
+	if _, err := Load(); err == nil {
+		t.Fatalf("Load() expected error for weak key, got nil")
+	}
+}

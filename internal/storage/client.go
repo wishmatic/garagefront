@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -84,9 +85,9 @@ func (c *Client) Head(ctx context.Context, key string) (*Object, error) {
 	if err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
 	}
-	resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		resp.Body.Close()
 		return &Object{
 			ContentType:  resp.Header.Get("Content-Type"),
 			ContentLen:   resp.ContentLength,
@@ -95,11 +96,12 @@ func (c *Client) Head(ctx context.Context, key string) (*Object, error) {
 		}, nil
 	}
 
+	defer resp.Body.Close()
 	return nil, c.statusError(resp)
 }
 
 func (c *Client) buildRequest(ctx context.Context, method, key string) (*http.Request, error) {
-	urlStr := fmt.Sprintf("%s/%s/%s", c.endpoint, c.bucket, key)
+	urlStr := fmt.Sprintf("%s/%s/%s", c.endpoint, c.bucket, escapeKey(key))
 
 	req, err := http.NewRequestWithContext(ctx, method, urlStr, nil)
 	if err != nil {
@@ -112,6 +114,14 @@ func (c *Client) buildRequest(ctx context.Context, method, key string) (*http.Re
 	}
 
 	return req, nil
+}
+
+func escapeKey(key string) string {
+	parts := strings.Split(key, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
 }
 
 func (c *Client) statusError(resp *http.Response) error {

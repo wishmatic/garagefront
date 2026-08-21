@@ -18,6 +18,8 @@ type Config struct {
 	TLSKeyFile   string `env:"TLS_KEY_FILE"`
 	CookieDomain string `env:"COOKIE_DOMAIN"`
 
+	ForceSchemeHTTPS bool `env:"FORCE_SCHEME_HTTPS" envDefault:"true"`
+
 	S3Endpoint          string `env:"S3_ENDPOINT,required"`
 	S3AccessKey         string `env:"S3_ACCESS_KEY"`
 	S3SecretKey         string `env:"S3_SECRET_KEY"`
@@ -27,6 +29,7 @@ type Config struct {
 
 	// Verification knobs.
 	ClockSkewSeconds int `env:"CLOCK_SKEW_SECONDS" envDefault:"60"`
+	MinRSAKeyBits    int `env:"MIN_RSA_KEY_BITS" envDefault:"2048"`
 
 	// Trusted signer public keys, keyed by CloudFront Key-Pair-Id.
 	TrustedSigners TrustedSigners `env:"TRUSTED_SIGNERS"`
@@ -38,6 +41,14 @@ func Load() (Config, error) {
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
 		return Config{}, fmt.Errorf("parse environment: %w", err)
+	}
+
+	for id, key := range cfg.TrustedSigners {
+		if cfg.MinRSAKeyBits > 0 && key.N.BitLen() < cfg.MinRSAKeyBits {
+			return Config{}, fmt.Errorf(
+				"trusted signer %q: public key is %d bits, below minimum %d", id, key.N.BitLen(), cfg.MinRSAKeyBits,
+			)
+		}
 	}
 
 	return cfg, nil

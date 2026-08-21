@@ -24,6 +24,10 @@ func (t *TrustedSigners) UnmarshalText(text []byte) error {
 }
 
 func LoadTrustedSigners(raw string) (TrustedSigners, error) {
+	return loadTrustedSigners(raw, 0)
+}
+
+func loadTrustedSigners(raw string, minBits int) (TrustedSigners, error) {
 	signers := TrustedSigners{}
 	if strings.TrimSpace(raw) == "" {
 		return signers, nil
@@ -46,7 +50,7 @@ func LoadTrustedSigners(raw string) (TrustedSigners, error) {
 			return nil, fmt.Errorf("invalid trusted signer entry %q: empty key-pair-id or path", entry)
 		}
 
-		key, err := loadRSAPublicKey(path)
+		key, err := loadRSAPublicKey(path, minBits)
 		if err != nil {
 			return nil, fmt.Errorf("load public key for %q: %w", keyPairID, err)
 		}
@@ -56,7 +60,7 @@ func LoadTrustedSigners(raw string) (TrustedSigners, error) {
 	return signers, nil
 }
 
-func loadRSAPublicKey(path string) (*rsa.PublicKey, error) {
+func loadRSAPublicKey(path string, minBits int) (*rsa.PublicKey, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -83,6 +87,10 @@ func loadRSAPublicKey(path string) (*rsa.PublicKey, error) {
 	rsaPub, ok := pub.(*rsa.PublicKey)
 	if !ok {
 		return nil, fmt.Errorf("public key is not an RSA key (got %T)", pub)
+	}
+
+	if minBits > 0 && rsaPub.N.BitLen() < minBits {
+		return nil, fmt.Errorf("public key is %d bits, below minimum %d", rsaPub.N.BitLen(), minBits)
 	}
 
 	return rsaPub, nil

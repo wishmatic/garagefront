@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -19,13 +20,11 @@ func MapPath(p string, includeRegionInPath bool) (string, error) {
 		return "", fmt.Errorf("decode path: %w", err)
 	}
 
-	// Reject any remaining traversal.
+	segments := splitPath(decoded)
 
-	if strings.Contains(decoded, "..") {
+	if slices.Contains(segments, "..") {
 		return "", ErrInvalidKey
 	}
-
-	segments := splitPath(decoded)
 
 	// Expect at least a prefix and one key segment.
 
