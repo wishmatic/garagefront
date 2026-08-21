@@ -87,3 +87,29 @@ go build ./...
 go vet ./...
 go test ./...
 ```
+
+## Tests
+
+`go test ./...` runs unit tests plus the end-to-end integration test in `internal/integration`. The integration test
+serves an object from an in-process mock Garage and verifies a real signed cookie minted by
+`@aws-sdk/cloudfront-signer` (the same library LibreChat uses), so it exercises the full verify path with no external
+services.
+
+The signed-cookie fixture and throwaway RSA key pair are generated on demand (and in CI) rather than committed, since
+the cookie signature is derived from the private key. They live under `data/tests/`, which is gitignored.
+
+To generate them locally:
+
+```sh
+sh scripts/integration/generate-fixtures.sh
+```
+
+This creates the key pair with `openssl`, installs the TypeScript signer with pnpm, and mints a cookie with a
+far-future expiry. To run the signer directly instead:
+
+```sh
+cd scripts/integration
+pnpm install
+pnpm sign ../../data/tests/test_private.pem APKA1234 "https://cdn.example.com/i/*" \
+  --epoch 4102444800 > ../../data/tests/cookies.json
+```

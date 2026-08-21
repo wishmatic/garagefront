@@ -36,5 +36,12 @@ go.work.sum
 /build/
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+.zed/
+
+# Node test tooling (scripts/integration)
+scripts/integration/node_modules/
+
+# Test fixtures (generated in CI)
+data/tests/

@@ -18,3 +18,5 @@ README.md
 PLAN.md
 SPEC.md
 LICENSE
+node_modules/
+data/tests/

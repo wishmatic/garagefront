@@ -244,6 +244,23 @@ config → storage client → server, and passes a `*log.Logger` for upstream-er
 3. The CI workflow runs unit tests on every push/PR; integration test is runnable via a
    documented command.
 
+**Status: COMPLETE**
+
+- AC1 — `internal/integration/integration_test.go` loads a committed fixture minted by
+  `@aws-sdk/cloudfront-signer@3.1036.0` (`scripts/integration/sign-cookie.ts`, run via `tsx`/pnpm)
+  and verifies it through the real `cookie.Verifier`. Passes.
+- AC2 — `TestRealSignerRoundTrip` asserts signed → 200 with correct headers, missing
+  cookies → 403, tampered signature → 403, against an in-process fake Garage.
+- AC3 — the CI `test` job already runs `go test ./...` (which includes the integration test in
+  `internal/integration`) and is a prerequisite of `publish`; the test needs no external services.
+  Fixture regeneration is documented in `README.md`.
+
+Implementation details: cookie fixture (`data/tests/cookies.json`, far-future epoch) and throwaway
+RSA key pair (`data/tests/test_*.pem`) are generated on demand and in CI (`sh scripts/integration/generate-fixtures.sh`)
+rather than committed, because the cookie signature is derived from the private key; in-process fake Garage via
+`httptest`; `Server.Handler()` accessor added for test reachability; the signer is TypeScript under
+`scripts/integration/` managed with pnpm (gitignored `node_modules`, excluded from the Docker image).
+
 ---
 
 ## Sequencing and dependencies
@@ -261,11 +278,6 @@ config → storage client → server, and passes a `*log.Logger` for upstream-er
 
 ## Open questions / follow-up
 
-- **Integration-test strategy (required, needs confirmation before U6):** the spec marks
-  integration testing as a required part of the work. Before implementing U6, I need to
-  confirm the strategy with you. Specifically: how the real `@aws-sdk/cloudfront-signer`
-  script should be invoked (committed Node script vs. ad-hoc one-off), whether the fake
-  Garage endpoint should be an in-process HTTP stub or a real Garage/minio container, how
-  CI should exercise integration tests (dedicated job vs. manual `go test -tags=integration`),
-  and where the generated RSA test key material lives. I will not proceed past U5 on
-  integration work until we agree on this.
+- Resolved during U6: pre-minted fixture (`data/tests/`), in-process fake Garage, integration
+  test runs in the normal `go test ./...` CI job, and a throwaway test key pair under
+  `data/tests/`.

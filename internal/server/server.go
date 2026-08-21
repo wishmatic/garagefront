@@ -132,6 +132,10 @@ func (s *Server) Run() error {
 	return nil
 }
 
+func (s *Server) Handler() http.Handler {
+	return s.http.Handler
+}
+
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.http.Shutdown(ctx)
 }
