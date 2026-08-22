@@ -11,6 +11,7 @@ import (
 
 	"github.com/wishmatic/garagefront/internal/config"
 	"github.com/wishmatic/garagefront/internal/server"
+	"github.com/wishmatic/garagefront/internal/storage"
 )
 
 func main() {
@@ -19,7 +20,17 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	srv := server.New(cfg)
+	store := storage.NewClient(
+		cfg.S3Endpoint,
+		cfg.S3Bucket,
+		cfg.S3Region,
+		cfg.S3AccessKey,
+		cfg.S3SecretKey,
+	)
+
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+
+	srv := server.New(cfg, store, logger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

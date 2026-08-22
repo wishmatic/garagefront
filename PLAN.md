@@ -178,6 +178,21 @@ SHA-256 is kept as a fallback.
 4. `/healthz` returns 200 `ok` regardless of auth.
 5. `go test ./internal/server/...` passes (using a fake storage backend and verifier).
 
+**Status: COMPLETE**
+
+- AC1 — `handleObject` rejects requests failing `verifier.Verify` with 403. Covered by
+  `TestMissingCookieReturns403` and `TestWrongResourceReturns403`.
+- AC2 — `handleObject` streams the object body and sets `Content-Type`, `Content-Length`,
+  `ETag`, `Last-Modified`, and a long `Cache-Control`. Covered by `TestValidCookieServesObject`.
+- AC3 — `writeStoreError` maps `ErrNotFound` → 404 and `ErrForbidden` → 403. Covered by
+  `TestNotFoundReturns404` and `TestForbiddenReturns403`.
+- AC4 — `handleHealthz` returns 200 `ok` with no auth. Covered by `TestHealthz`.
+- AC5 — `go test ./internal/server/...` passes (also `go build ./...`, `go vet ./...`).
+
+Additional: upstream storage errors map to 502 (`TestUpstreamErrorReturns502`). `Server` takes an
+`ObjectStore` interface (satisfied by `*storage.Client`) so tests inject a fake. `main.go` wires
+config → storage client → server, and passes a `*log.Logger` for upstream-error logging.
+
 ---
 
 ## U5 — HTTPS serving on the exact hostname
@@ -197,6 +212,15 @@ SHA-256 is kept as a fallback.
    over TLS.
 2. `.env.example` and `README.md` document `PUBLIC_HOST`, `TLS_CERT_FILE`, `TLS_KEY_FILE`,
    `COOKIE_DOMAIN`, and the Garage/signer settings.
+
+**Status: COMPLETE**
+
+- AC1 — `Server.Run` calls `ListenAndServeTLS` when both `TLS_CERT_FILE` and `TLS_KEY_FILE` are
+  set, else falls back to plain HTTP. Covered by `TestServeTLS` (self-signed cert, real HTTPS
+  round-trip to `/healthz`).
+- AC2 — `.env.example` and `README.md` document `PUBLIC_HOST`, `TLS_CERT_FILE`, `TLS_KEY_FILE`,
+  `COOKIE_DOMAIN`, and the S3/signer settings, plus a TLS section explaining proxy vs direct TLS
+  and a self-signed-cert example.
 
 ---
 

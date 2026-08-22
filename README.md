@@ -62,6 +62,22 @@ seconds. This effectively extends cookie lifetime by that amount; set it to `0` 
 `FORCE_SCHEME_HTTPS` (default `true`) makes the verifier treat every request as `https`, which is required when TLS
 terminates at the reverse proxy. Set it to `false` only if TLS terminates at this service itself.
 
+### TLS
+
+This service can serve HTTPS directly when both `TLS_CERT_FILE` and `TLS_KEY_FILE` are set; otherwise it listens on
+plain HTTP and expects a reverse proxy to terminate TLS. When running behind a proxy, keep `FORCE_SCHEME_HTTPS=true` so
+cookies signed over `https://` URLs verify correctly.
+
+In the intended deployment the reverse proxy and Garagefront share a private network, so plain HTTP between them is
+fine and is the default; the proxy is the security boundary and the only hop a browser ever sees. The TLS options above
+are primarily for standalone or local testing rather than a hardening step.
+
+Generate a self-signed certificate for local testing with:
+
+```sh
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=cdn.example.com"
+```
+
 ## Local Development
 
 ```sh
