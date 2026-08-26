@@ -4,7 +4,7 @@
     "sign": "tsx sign-cookie.ts"
   },
   "dependencies": {
-    "@aws-sdk/cloudfront-signer": "3.1036.0"
+    "@aws-sdk/cloudfront-signer": "3.1116.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

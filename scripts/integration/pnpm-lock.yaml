@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@aws-sdk/cloudfront-signer':
-        specifier: 3.1036.0
-        version: 3.1036.0
+        specifier: 3.1116.0
+        version: 3.1116.0
     devDependencies:
       '@types/node':
         specifier: ^26.2.0
@@ -24,8 +24,8 @@ importers:
 
 packages:
 
-  '@aws-sdk/cloudfront-signer@3.1036.0':
-    resolution: {integrity: sha512-AXEl7lGvlbWbN0Xi0dd0XVfzVnA39dUyMILPcTk6Q5DkwmPgp6M/K6A6Ejbjajhoe8C1AUF4O1+hDc7DPxnBxg==}
+  '@aws-sdk/cloudfront-signer@3.1116.0':
+    resolution: {integrity: sha512-zdNMkn/b5c7pZFiyL5BR0RMPJKwyYvS6YH9j131O97XMTVrpm870OyeafVrFIMinqRvNBWzoxp7y8b8IA8VJwQ==}
     engines: {node: '>=20.0.0'}
 
   '@esbuild/aix-ppc64@0.28.2':
@@ -184,16 +184,12 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@smithy/core@3.33.2':
-    resolution: {integrity: sha512-CUGXpnPkVdjUCbix+83sWLW9VFgQOm44MDOx/ihITJMAnOZKvL8YYIc7DR9pP/tZ8CIRvMiON/TucvygqbHO3w==}
+  '@smithy/core@3.33.3':
+    resolution: {integrity: sha512-CsOeKq/9kA3y6VJHt+/+VTCtBaxJ4OTFpgrjIUhPpDIKxBci1k2bJaQASF2h/ELWrulGp+t97DZ0mevfAD8idg==}
     engines: {node: '>=18.0.0'}
 
   '@smithy/types@4.17.2':
     resolution: {integrity: sha512-FOKpVZob9MPTn2znRzGrnsMHv7BOsKVw3XiP/cOyYLDVZ9qKp4nifIiSCuUU/fIj5Vu0UOAxCFr+qRAtG0NUkA==}
-    engines: {node: '>=18.0.0'}
-
-  '@smithy/url-parser@4.5.2':
-    resolution: {integrity: sha512-xqZcyU/YjOt9ofe8WM1y9aCaAmxel2iRiHpkT0x2BN++mRXw0M4VdxPAOtuux279JndY6wWMiOt5BJ2xmAuMYA==}
     engines: {node: '>=18.0.0'}
 
   '@types/node@26.2.0':
@@ -227,10 +223,9 @@ packages:
 
 snapshots:
 
-  '@aws-sdk/cloudfront-signer@3.1036.0':
+  '@aws-sdk/cloudfront-signer@3.1116.0':
     dependencies:
-      '@smithy/core': 3.33.2
-      '@smithy/url-parser': 4.5.2
+      '@smithy/core': 3.33.3
       tslib: 2.8.1
 
   '@esbuild/aix-ppc64@0.28.2':
@@ -311,18 +306,13 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@smithy/core@3.33.2':
+  '@smithy/core@3.33.3':
     dependencies:
       '@smithy/types': 4.17.2
       tslib: 2.8.1
 
   '@smithy/types@4.17.2':
     dependencies:
-      tslib: 2.8.1
-
-  '@smithy/url-parser@4.5.2':
-    dependencies:
-      '@smithy/core': 3.33.2
       tslib: 2.8.1
 
   '@types/node@26.2.0':
