@@ -48,3 +48,24 @@ jobs:
               run: |
                   docker build --tag "${{ vars.REGISTRY }}/${{ forgejo.repository }}:latest" .
                   docker push "${{ vars.REGISTRY }}/${{ forgejo.repository }}:latest"
+
+    mirror:
+        needs: [build, test]
+        if: forgejo.event_name == 'push' && forgejo.ref == 'refs/heads/main'
+        runs-on: ubuntu-latest-go
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+            - name: generate installation token
+              uses: actions/create-github-app-token@v1
+              id: app-token
+              with:
+                  app-id: ${{ secrets.GH_APP_ID }}
+                  private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+                  owner: ${{ vars.GITHUB_OWNER }}
+                  repositories: ${{ vars.GITHUB_REPO }}
+            - name: push main to GitHub
+              run: |
+                  git remote add github "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ vars.GITHUB_OWNER }}/${{ vars.GITHUB_REPO }}.git"
+                  git push github main:main
