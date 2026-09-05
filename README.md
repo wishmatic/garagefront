@@ -2,41 +2,56 @@
 
 Cloudfront emulator for Garage/S3 and LibreChat enabling "cookies" image signing.
 
-> Warning!
+## Quick Start
 
-> This service is designed to sit behind a reverse proxy (Nginx, Caddy, NPM, etc.) that terminates TLS. Signed
-> cookies are marked `Secure` + `SameSite=None`, which browsers will only transmit over HTTPS.
->
-> If you expose this service over plain HTTP directly (i.e. reachable at `http://` from a browser), signed cookies
-> will _not_ work, and any traffic to it will be unencrypted. Ensure the proxy enforces HTTPS at the DNS/edge
-> level and forwards requests to this service over a trusted internal network.
->
-> You may need to adjust access lists, if applicable, such that both Librechat and trusted devices can access
-> Garagefront-served assets.
->
-> See `FORCE_SCHEME_HTTPS` below. With the default value (`true`) the service assumes requests arrived over HTTPS even
-> though the proxy speaks plain HTTP.
->
-> To verify cookie policies signed over `https://` URLs, the browser will only transmit cookies over HTTPS.
+Run as a Docker container:
 
-## What It Does
+```sh
+docker run -d \
+  -e PUBLIC_HOST=https://librechat.example.com \
+  -e S3_ENDPOINT=http://garage:3900 \
+  -e S3_ACCESS_KEY=access-key \
+  -e S3_SECRET_KEY=secret-key \
+  -e S3_BUCKET=librechat-s3 \
+  -e S3_REGION=garage \
+  -e "TRUSTED_SIGNERS=APKA12345=/keys/public.pem" \
+  -v /mnt/user/appdata/garagefront/keys:/keys/ \
+  ghcr.io/wishmatic/garagefront:latest
+```
 
-Garagefront is a read-only stand-in for CloudFront. It serves two kinds of object, fetched from S3/Garage with
-SigV4-signed `GetObject` requests, and only after verifying a CloudFront signed cookie:
+## Why?
+
+If you use LibreChat with Garage/some other S3-compatible backend, avatars and uploaded images will get you presigned
+URLs which can expire after at most 7 days. This is "fine" for most cases, but the correct _usual_ way to handle this
+is S3 + CloudFront.
+
+This also gets you the benefit of image signing via cookies, so images can only be viewed from the same domain.
+
+There aren't any tools that specifically do this for non-S3 S3-compatible backends that I could find, so this exists
+to bridge that gap in a secure way on a local network.
+
+This service exists so those images do not get stale specifically for LibreChat.
+
+### Okay, but do I really need this?
+
+Not really. This is a niche use case. You can just serve from local and that will work just as well. However, you
+can't get cookie-based image signing with a local backend.
+
+## What is it?
+
+Garagefront is a read-only stand-in for CloudFront. It serves:
 
 - `/i/...` private images, scoped to a user
 - `/a/...` avatars, scoped to a tenant
 
-The object key equals the request path (the leading `i`/`a` segment is part of the key), so `/i/images/user/file.png`
-fetches the S3 object `i/images/user/file.png`. Region-aware paths (`/i/r/<region>/...`) work when LibreChat is
-configured with `includeRegionInPath`.
+E.g., `/i/images/user/file.png` fetches the S3 object `i/images/user/file.png`. Region-aware paths
+(i.e., `/i/r/<region>/...`) work when LibreChat is configured with `includeRegionInPath`.
 
-Responses echo the object's `Content-Type`, `Content-Length`, `ETag`, and `Last-Modified`, plus a long
-`Cache-Control: public, max-age=31536000, immutable`.
+Note: Responses have a long `Cache-Control` header (`public, max-age=31536000, immutable`).
 
 ## LibreChat Configuration
 
-Point LibreChat at Garagefront with `fileStrategies` and a `cloudfront` block in `librechat.yaml`:
+In your Librechat configuration YAML:
 
 ```yaml
 fileStrategies:
@@ -57,30 +72,31 @@ cloudfront:
 ```
 
 `cloudfront.domain` must be the public host Garagefront serves (its `PUBLIC_HOST`), and `cookieDomain` must be a
-parent of that host so the browser sends the signed cookies (see the TLS note above).
+parent of that host.
 
-The CloudFront key pair is split across the two sides: the private key and key-pair ID go to LibreChat via the
-`CLOUDFRONT_KEY_PAIR_ID` and `CLOUDFRONT_PRIVATE_KEY` environment variables, and the public key plus the same
-key-pair ID go to Garagefront via `TRUSTED_SIGNERS` (below).
+The private key and key-pair ID go to LibreChat via the `CLOUDFRONT_KEY_PAIR_ID` and `CLOUDFRONT_PRIVATE_KEY` envars,
+and the public key plus the same key-pair ID go to Garagefront via `TRUSTED_SIGNERS`.
 
-### Why Only Images
+## TLS Warning
 
-Only `image` and `avatar` point at `cloudfront`. The rest stay on `s3` (or `local`) because they don't need signed
-cookies: docs are downloaded on demand, so LibreChat can mint a short-lived presigned URL when you click download.
-Images and avatars are loaded inline on every page, so they need a long-lived cookie instead.
+This service is designed to sit behind a reverse proxy (Nginx, Caddy, NPM, etc.) that terminates TLS. Signed
+cookies are marked `Secure` + `SameSite=None`, which browsers will only transmit over HTTPS.
 
-Of course, you can always just use local storage for everything or deal with the occasional broken image.
+See `FORCE_SCHEME_HTTPS` below. With the default value (`true`) the service assumes requests arrived over HTTPS even
+though the proxy speaks plain HTTP.
 
-## Deployment
+To verify cookie policies signed over `https://` URLs, the browser will only transmit cookies over HTTPS.
 
-Deploy as a Docker container. You will need to specify the envars present in the `.env.example` file.
+See [TLS](#tls) below for more details.
+
+## Information
 
 ### Trusted Signers
 
 `TRUSTED_SIGNERS` is a comma-separated list of `keypairid=/path/to/public.pem` entries. Public keys may be PKIX
 (`BEGIN PUBLIC KEY`) or PKCS#1(`BEGIN RSA PUBLIC KEY`) PEM.
 
-Generate the key pair on Linux with:
+Generate the key pair with:
 
 ```sh
 openssl genrsa -out private.pem 2048
@@ -91,25 +107,12 @@ Signer keys shorter than `MIN_RSA_KEY_BITS` (default 2048) are rejected.
 
 ### Algorithm
 
-LibreChat signs CloudFront cookies with **SHA-1** by default (it does not pass an `algorithm` to
-`@aws-sdk/cloudfront-signer`). This service therefore verifies SHA-1 signatures, with SHA-256 accepted as a fallback
-for forward compatibility.
+LibreChat signs CloudFront cookies with SHA-1 by default. This service therefore verifies SHA-1 signatures, with
+SHA-256 accepted as a fallback for forward compatibility.
 
 ### Divergences
 
-This is an emulator, not a full CloudFront replacement. See [`docs/DIVERGENCES.md`](docs/DIVERGENCES.md) for the
-differences you should be aware of before deploying.
-
-### Clock Skew
-
-Signed cookies carry an absolute expiry. To tolerate a small difference between the clocks of LibreChat (the signer)
-and this service, `CLOCK_SKEW_SECONDS` (default 60) accepts a token that is past its expiry by up to that many
-seconds. This effectively extends cookie lifetime by that amount; set it to `0` if you want strict expiry.
-
-### Scheme Handling
-
-`FORCE_SCHEME_HTTPS` (default `true`) makes the verifier treat every request as `https`, which is required when TLS
-terminates at the reverse proxy. Set it to `false` only if TLS terminates at this service itself.
+This is an emulator, not a full CloudFront replacement. See [`docs/DIVERGENCES.md`](docs/DIVERGENCES.md).
 
 ### TLS
 
@@ -117,9 +120,8 @@ This service can serve HTTPS directly when both `TLS_CERT_FILE` and `TLS_KEY_FIL
 plain HTTP and expects a reverse proxy to terminate TLS. When running behind a proxy, keep `FORCE_SCHEME_HTTPS=true` so
 cookies signed over `https://` URLs verify correctly.
 
-In the intended deployment the reverse proxy and Garagefront share a private network, so plain HTTP between them is
-fine and is the default; the proxy is the security boundary and the only hop a browser ever sees. The TLS options above
-are primarily for standalone or local testing rather than a hardening step.
+In the intended deployment the reverse proxy and Garagefront share a private network. These TLS options are primarily
+for standalone or local testing rather than a hardening step.
 
 Generate a self-signed certificate for local testing with:
 
@@ -139,22 +141,17 @@ go test ./...
 
 ## Tests
 
-`go test ./...` runs unit tests plus the end-to-end integration test in `internal/integration`. The integration test
-serves an object from an in-process mock Garage and verifies a real signed cookie minted by
-`@aws-sdk/cloudfront-signer` (the same library LibreChat uses), so it exercises the full verify path with no external
-services.
+`go test ./...` runs unit tests plus the E2E test in `internal/integration`. The integration test serves an object
+from an in-process mock Garage and verifies a real signed cookie minted by `@aws-sdk/cloudfront-signer`, the same
+lib LibreChat uses as of writing, so it exercises the full verify path with no external services.
 
-The signed-cookie fixture and throwaway RSA key pair are generated on demand (and in CI) rather than committed, since
-the cookie signature is derived from the private key. They live under `data/tests/`, which is gitignored.
-
-To generate them locally:
+To generate fixtures locally:
 
 ```sh
 sh scripts/integration/generate-fixtures.sh
 ```
 
-This creates the key pair with `openssl`, installs the TypeScript signer with pnpm, and mints a cookie with a
-far-future expiry. To run the signer directly instead:
+To run the signer directly:
 
 ```sh
 cd scripts/integration
