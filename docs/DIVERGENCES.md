@@ -2,14 +2,15 @@
 
 > ...from a full CloudFront emulator.
 
-TL;DR: In practice this means: if your workload is LibreChat serving inline images and avatars, Garagefront behaves
+**TL;DR:** In practice this means: if your workload is LibreChat serving inline images and avatars, Garagefront behaves
 like CloudFront. If you rely on anything else CloudFront offers, it won't.
 
 Garagefront is a purpose-built emulator for one specific workload: serving LibreChat inline images and avatars behind
-signed cookies. It is not a general-purpose CloudFront replacement. The list below is not exhaustive, but covers the
-differences most likely to matter to an end user.
+signed cookies. It is not a general-purpose CloudFront replacement.
 
 ## Will Not Implement
+
+> ...unless Librechat itself changes.
 
 - Signed URLs and canned policies:
     - Only signed cookies with a custom policy (`CloudFront-Policy`) are verified.
@@ -24,8 +25,11 @@ differences most likely to matter to an end user.
     - `invalidateOnDelete` is assumed disabled.
 - Origin Access Control and bucket-policy enforcement:
     - Garagefront uses its own S3-compatible credentials rather than AWS OAC.
-- Caching, edge behaviours, and Lambda@Edge; there is no built-in CDN caching layer.
 - ECDSA/other keys; only RSA public keys are accepted as trusted signers.
+
+## Probably Will Not Implement
+
+- Caching, edge behaviours, and Lambda@Edge; there is no built-in CDN caching layer.
 
 ## Different Implementation
 
