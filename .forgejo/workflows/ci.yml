@@ -19,11 +19,11 @@ jobs:
               with:
                   app-id: ${{ secrets.GH_APP_ID }}
                   private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-                  owner: ${{ vars.GITHUB_OWNER }}
-                  repositories: ${{ vars.GITHUB_REPO }}
+                  owner: ${{ vars.REPO_OWNER }}
+                  repositories: ${{ vars.REPO_NAME }}
             - name: push main to GitHub
               run: |
-                  git remote add github "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ vars.GITHUB_OWNER }}/${{ vars.GITHUB_REPO }}.git"
+                  git remote add github "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ vars.REPO_OWNER }}/${{ vars.REPO_NAME }}.git"
                   git push github main:main
 
     build:
