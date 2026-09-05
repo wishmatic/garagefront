@@ -21,6 +21,7 @@ jobs:
                   private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
                   owner: ${{ vars.REPO_OWNER }}
                   repositories: ${{ vars.REPO_NAME }}
+                  github-api-url: https://api.github.com
             - name: push main to GitHub
               run: |
                   git remote add github "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ vars.REPO_OWNER }}/${{ vars.REPO_NAME }}.git"
