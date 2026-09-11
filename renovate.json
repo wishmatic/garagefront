@@ -13,15 +13,22 @@
 	"hostRules": [],
 	"packageRules": [
 		{
-			"groupName": "Update dev dependencies via Renovate",
+			"groupName": "Update NPM dev dependencies via Renovate",
 			"matchDepTypes": ["devDependencies"],
 			"matchUpdateTypes": ["patch", "minor"],
 			"automerge": true,
 			"automergeType": "branch"
 		},
 		{
-			"groupName": "Update dependencies via Renovate",
+			"groupName": "Update NPM dependencies via Renovate",
 			"matchDepTypes": ["dependencies", "peerDependencies"],
+			"matchUpdateTypes": ["patch", "minor"],
+			"automerge": true,
+			"automergeType": "branch"
+		},
+		{
+			"groupName": "Update Go dependencies via Renovate",
+			"matchManagers": ["gomod"],
 			"matchUpdateTypes": ["patch", "minor"],
 			"automerge": true,
 			"automergeType": "branch"
