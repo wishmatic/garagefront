@@ -159,3 +159,8 @@ pnpm install
 pnpm sign ../../data/tests/test_private.pem APKA1234 "https://cdn.example.com/i/*" \
   --epoch 4102444800 > ../../data/tests/cookies.json
 ```
+
+## License
+
+This project is not affiliated with or endorsed by LibreChat, Amazon Web Services (S3 and CloudFront), or Garage.
+Those names are trademarks of their respective owners and are used here only to describe compatibility.
