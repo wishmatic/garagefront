@@ -162,5 +162,7 @@ pnpm sign ../../data/tests/test_private.pem APKA1234 "https://cdn.example.com/i/
 
 ## License
 
+Garagefront is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+
 This project is not affiliated with or endorsed by LibreChat, Amazon Web Services (S3 and CloudFront), or Garage.
 Those names are trademarks of their respective owners and are used here only to describe compatibility.
