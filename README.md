@@ -37,6 +37,12 @@ This service exists so those images do not get stale specifically for LibreChat.
 Not really. This is a niche use case. You can just serve from local and that will work just as well. However, you
 can't get cookie-based image signing with a local backend.
 
+### Can I use it for non-Librechat purposes?
+
+That is not supported at the moment; we only serve at `/i/` and `/a/`.
+
+Feel free to fork this repo yourself; it likely contains all the pieces you need to customize it for your own use.
+
 ## What is it?
 
 Garagefront is a read-only stand-in for CloudFront. It serves:
