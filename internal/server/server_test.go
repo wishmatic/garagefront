@@ -154,8 +154,8 @@ func TestValidCookieServesObject(t *testing.T) {
 	if rec.Header().Get("Last-Modified") != "Mon, 01 Jan 2024 00:00:00 GMT" {
 		t.Errorf("Last-Modified = %q", rec.Header().Get("Last-Modified"))
 	}
-	if rec.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
-		t.Errorf("Cache-Control = %q", rec.Header().Get("Cache-Control"))
+	if rec.Header().Get("Cache-Control") != "private, no-store" {
+		t.Errorf("Cache-Control = %q, want private, no-store", rec.Header().Get("Cache-Control"))
 	}
 	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
@@ -192,6 +192,38 @@ func TestPublicPathServesWithoutCookies(t *testing.T) {
 	}
 	if store.lastKey != "i/public/logos/brand.png" {
 		t.Errorf("object key = %q, want i/public/logos/brand.png", store.lastKey)
+	}
+	if rec.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
+		t.Errorf("Cache-Control = %q, want public, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
+	}
+}
+
+// TestErrorResponsesAreNotLongCached guards the success-path-only Cache-Control: an error must never be advertised as
+// long-lived and cacheable, least of all on the public namespace where a shared cache would store it for a year.
+func TestErrorResponsesAreNotLongCached(t *testing.T) {
+	key := newKey(t)
+	s := testServer(t, key, &fakeStore{err: storage.ErrNotFound})
+
+	cookies := signedCookies(t, key, "https://cdn.example.com/i/*", time.Now().Add(time.Hour).Unix())
+
+	cases := map[string]struct {
+		path    string
+		cookies map[string]string
+	}{
+		"cookie-verified": {path: "/i/images/user/1.png", cookies: cookies},
+		"public":          {path: "/i/public/logos/brand.png"},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			rec := doRequest(t, s, tc.path, tc.cookies)
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404", rec.Code)
+			}
+			if got := rec.Header().Get("Cache-Control"); got != "" {
+				t.Errorf("Cache-Control = %q, want empty", got)
+			}
+		})
 	}
 }
 

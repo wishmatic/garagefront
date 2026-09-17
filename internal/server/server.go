@@ -19,6 +19,11 @@ import (
 // publicPrefix is the URL path prefix served without cookie verification.
 const publicPrefix = "/i/public/"
 
+const (
+	cacheControlPublic  = "public, max-age=31536000, immutable"
+	cacheControlPrivate = "private, no-store"
+)
+
 type ObjectStore interface {
 	Get(ctx context.Context, key string) (*storage.Object, error)
 }
@@ -99,7 +104,7 @@ func (s *Server) handleObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.serveObject(w, r)
+	s.serveObject(w, r, cacheControlPrivate)
 }
 
 // handlePublicObject serves objects under publicPrefix without a signed cookie. Host validation still applies.
@@ -111,10 +116,10 @@ func (s *Server) handlePublicObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.serveObject(w, r)
+	s.serveObject(w, r, cacheControlPublic)
 }
 
-func (s *Server) serveObject(w http.ResponseWriter, r *http.Request) {
+func (s *Server) serveObject(w http.ResponseWriter, r *http.Request, cacheControl string) {
 	key, err := storage.MapPath(r.URL.Path)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -152,7 +157,9 @@ func (s *Server) serveObject(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Last-Modified", obj.LastModified)
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	// Only on the success path, so error responses are never advertised as long-lived and cacheable.
+
+	w.Header().Set("Cache-Control", cacheControl)
 
 	w.WriteHeader(http.StatusOK)
 	if s.maxResponseBytes > 0 {

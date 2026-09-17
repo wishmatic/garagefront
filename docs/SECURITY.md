@@ -41,7 +41,11 @@ Future audits should not re-flag the items below.
       Forcing `https` is required for cookie policies signed over `https://` URLs to verify correctly.
 - `CLOCK_SKEW_SECONDS` tolerance:
     - A deliberate, configurable allowance for clock drift between the signer and this service.
-- Long `Cache-Control` with `immutable` on served objects.
+- Long `Cache-Control` with `immutable` on public (`/i/public/`) object responses.
+- Cookie-verified responses are not shared-cacheable:
+    - They are sent `Cache-Control: private, no-store`. Shared cache keys do not include cookies, so a copy stored by a
+      CDN or reverse proxy would be handed to clients that never presented a signed cookie. Keeping these out of
+      shared caches costs origin traffic (see Known Issues) but is required for cookie gating to mean anything.
 - Unauthenticated `/i/public/` namespace:
     - Requests under `/i/public/` are served without cookie verification by design, so objects stored under the
       `i/public/` key prefix are world-readable to anyone who can reach Garagefront. Host validation (`PUBLIC_HOST`)
@@ -54,12 +58,13 @@ Future audits should not re-flag the items below.
       valid signed cookie is broadly scoped (`/i/*` or `/a/*`) and long-lived, so it can be replayed to drive a 1:1
       amplification of `GetObject` requests against the origin. There is no in-process cache so every cache-miss inline
       image load reaches the origin.
-    - In the intended deployment this is mitigated by the reverse proxy's asset cache (Nginx Proxy Manager "Cache
-      Assets"): responses carry `Cache-Control: public, max-age=31536000, immutable`, so repeated requests for the same
-      object are served from the proxy cache and never reach the origin. That covers the dominant case (many clients
-      loading the same stable-keyed images/avatars). It does not bound a determined actor enumerating _distinct_ keys
-      (cache misses), nor raw request rate; for the self-hosted, trusted-client model this residual is not much of a
-      risk. Still, it could still be something worth fixing in future.
+    - This is no longer mitigated by the reverse proxy's asset cache (Nginx Proxy Manager "Cache Assets") for
+      cookie-verified objects: those responses are deliberately marked `Cache-Control: private, no-store` (see Accepted
+      By Design), so the asset cache only absorbs `/i/public/...` traffic. Every request for a private image or avatar
+      therefore reaches Garagefront, and S3 on a miss.
+    - This is the deliberate trade: correctness over origin load. A shared cache that stored these responses would
+      serve them to clients that never presented a signed cookie, which defeats cookie gating entirely. Rate limiting
+      at the reverse proxy, or a cookie-aware cache key, would be the mitigations for the added origin load.
 
 ## Agentic Audit
 

@@ -58,7 +58,9 @@ Anything under `/i/public/` is served without cookie verification, so any object
 prefix at `/i/public/...` is world-readable to anyone who can reach Garagefront. Do not store private content there.
 Host validation (`PUBLIC_HOST`) still applies to these requests.
 
-Note: Responses have a long `Cache-Control` header (`public, max-age=31536000, immutable`).
+Caching: `/i/public/...` responses are sent `Cache-Control: public, max-age=31536000, immutable`, so a CDN or reverse
+proxy can store them. Cookie-verified responses are sent `private, no-store` instead, so a shared cache never serves
+them to a client that did not present a signed cookie; every such request reaches Garagefront.
 
 ## LibreChat Configuration
 

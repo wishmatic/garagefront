@@ -44,4 +44,6 @@ signed cookies. It is not a general-purpose CloudFront replacement.
 ## Hardened
 
 - Host validation; requests whose `Host` header does not match `PUBLIC_HOST` are rejected.
+- Cache safety; public objects are shared-cacheable, while cookie-verified objects are sent `private, no-store` so a
+  CDN or reverse proxy cannot serve them to a client that did not present a signed cookie.
 - Minimum signer key size; trusted keys shorter than `MIN_RSA_KEY_BITS` (default 2048) are rejected.
