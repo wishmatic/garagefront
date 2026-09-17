@@ -174,4 +174,12 @@ func TestRealSignerRoundTrip(t *testing.T) {
 	if resp3.StatusCode != http.StatusForbidden {
 		t.Fatalf("tampered-signature request status = %d, want 403", resp3.StatusCode)
 	}
+
+	// The public namespace is served without cookies.
+
+	resp4 := doGet(t, s, "/i/public/logos/brand.png", nil)
+	defer resp4.Body.Close()
+	if resp4.StatusCode != http.StatusOK {
+		t.Fatalf("public request status = %d, want 200", resp4.StatusCode)
+	}
 }

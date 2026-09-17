@@ -27,11 +27,13 @@ const keyPairID = "APKA1234"
 var base64Std = base64.StdEncoding
 
 type fakeStore struct {
-	obj *storage.Object
-	err error
+	obj     *storage.Object
+	err     error
+	lastKey string
 }
 
 func (f *fakeStore) Get(ctx context.Context, key string) (*storage.Object, error) {
+	f.lastKey = key
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -166,6 +168,58 @@ func TestValidCookieServesObject(t *testing.T) {
 	}
 	if got := rec.Header().Get("Content-Security-Policy"); got != "default-src 'none'" {
 		t.Errorf("Content-Security-Policy = %q, want default-src 'none'", got)
+	}
+}
+
+func TestPublicPathServesWithoutCookies(t *testing.T) {
+	key := newKey(t)
+	body := []byte("public bytes")
+	store := &fakeStore{
+		obj: &storage.Object{
+			Body:        io.NopCloser(bytes.NewReader(body)),
+			ContentType: "image/png",
+			ContentLen:  int64(len(body)),
+		},
+	}
+	s := testServer(t, key, store)
+
+	rec := doRequest(t, s, "/i/public/logos/brand.png", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if rec.Body.String() != string(body) {
+		t.Errorf("body = %q, want %q", rec.Body.String(), string(body))
+	}
+	if store.lastKey != "i/public/logos/brand.png" {
+		t.Errorf("object key = %q, want i/public/logos/brand.png", store.lastKey)
+	}
+}
+
+func TestPublicPathStillValidatesHost(t *testing.T) {
+	key := newKey(t)
+	store := &fakeStore{}
+	s := testServer(t, key, store)
+
+	req := httptest.NewRequest(http.MethodGet, "http://evil.example.com/i/public/logos/brand.png", nil)
+	req.Host = "evil.example.com"
+
+	rec := httptest.NewRecorder()
+	s.http.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+}
+
+// TestPublicPrefixNeedsSegmentBoundary guards against a prefix match that would publish sibling namespaces such as
+// "i/publicity/...".
+func TestPublicPrefixNeedsSegmentBoundary(t *testing.T) {
+	key := newKey(t)
+	s := testServer(t, key, &fakeStore{})
+
+	rec := doRequest(t, s, "/i/publicity/secret.png", nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
 	}
 }
 

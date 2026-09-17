@@ -16,6 +16,9 @@ import (
 	"github.com/wishmatic/garagefront/internal/storage"
 )
 
+// publicPrefix is the URL path prefix served without cookie verification.
+const publicPrefix = "/i/public/"
+
 type ObjectStore interface {
 	Get(ctx context.Context, key string) (*storage.Object, error)
 }
@@ -49,6 +52,10 @@ func New(cfg config.Config, store ObjectStore, logger *log.Logger) *Server {
 	}
 
 	mux := http.NewServeMux()
+
+	// The more specific pattern wins, so "/i/public/..." bypasses cookie verification while the rest does not.
+
+	mux.HandleFunc(publicPrefix, s.handlePublicObject)
 	mux.HandleFunc("/i/", s.handleObject)
 	mux.HandleFunc("/a/", s.handleObject)
 
@@ -92,6 +99,22 @@ func (s *Server) handleObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.serveObject(w, r)
+}
+
+// handlePublicObject serves objects under publicPrefix without a signed cookie. Host validation still applies.
+func (s *Server) handlePublicObject(w http.ResponseWriter, r *http.Request) {
+	if err := s.verifier.VerifyHost(r); err != nil {
+		s.log.Printf("forbidden: path=%q host=%q err=%v", r.URL.Path, r.Host, err)
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+
+		return
+	}
+
+	s.serveObject(w, r)
+}
+
+func (s *Server) serveObject(w http.ResponseWriter, r *http.Request) {
 	key, err := storage.MapPath(r.URL.Path)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)

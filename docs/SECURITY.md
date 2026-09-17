@@ -42,6 +42,10 @@ Future audits should not re-flag the items below.
 - `CLOCK_SKEW_SECONDS` tolerance:
     - A deliberate, configurable allowance for clock drift between the signer and this service.
 - Long `Cache-Control` with `immutable` on served objects.
+- Unauthenticated `/i/public/` namespace:
+    - Requests under `/i/public/` are served without cookie verification by design, so objects stored under the
+      `i/public/` key prefix are world-readable to anyone who can reach Garagefront. Host validation (`PUBLIC_HOST`)
+      still applies, and no other path is affected. Do not store private content under this prefix.
 
 ## Known Issues
 

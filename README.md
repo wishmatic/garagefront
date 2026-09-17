@@ -48,10 +48,15 @@ Feel free to fork this repo yourself; it likely contains all the pieces you need
 Garagefront is a read-only stand-in for CloudFront. It serves:
 
 - `/i/...` private images, scoped to a user
+- `/i/public/...` public images; no signed cookie is required
 - `/a/...` avatars, scoped to a tenant
 
 E.g., `/i/images/user/file.png` fetches the S3 object `i/images/user/file.png`. Region-aware paths
 (i.e., `/i/r/<region>/...`) work when LibreChat is configured with `includeRegionInPath`.
+
+Anything under `/i/public/` is served without cookie verification, so any object stored under the `i/public/` key
+prefix at `/i/public/...` is world-readable to anyone who can reach Garagefront. Do not store private content there.
+Host validation (`PUBLIC_HOST`) still applies to these requests.
 
 Note: Responses have a long `Cache-Control` header (`public, max-age=31536000, immutable`).
 

@@ -91,17 +91,27 @@ func NewVerifier(keys map[string]*rsa.PublicKey, clockSkewSeconds int, opts ...V
 	return v
 }
 
+// VerifyHost rejects requests whose Host header does not match the configured public host. Verify calls it, and it is
+// exported separately so paths served without cookie verification can still enforce the same host validation.
+func (v *Verifier) VerifyHost(r *http.Request) error {
+	if v.publicHost == "" || strings.EqualFold(r.Host, v.publicHost) {
+		return nil
+	}
+
+	v.logger.Warn("rejected request: host mismatch",
+		"host", r.Host,
+		"expected", v.publicHost,
+		"path", r.URL.Path,
+	)
+
+	return ErrAccessDenied
+}
+
 func (v *Verifier) Verify(r *http.Request) error {
 	path := r.URL.Path
 
-	if v.publicHost != "" && !strings.EqualFold(r.Host, v.publicHost) {
-		v.logger.Warn("rejected request: host mismatch",
-			"host", r.Host,
-			"expected", v.publicHost,
-			"path", path,
-		)
-
-		return ErrAccessDenied
+	if err := v.VerifyHost(r); err != nil {
+		return err
 	}
 
 	keyPairID := cookieValue(r, "CloudFront-Key-Pair-Id")
